@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CNG MultiChat Overlay</title>
+<style>
+:root{--panel:rgba(8,9,13,.82);--border:rgba(255,255,255,.10);--text:#f5f5f7;--kick:#53e000;--twitch:#9147ff;--tiktok:#25f4ee;--cng:#ff8a00;--youtube:#ff0000}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}
+body{font-family:Inter,Segoe UI,Arial,"Noto Color Emoji","Segoe UI Emoji","Apple Color Emoji",sans-serif;color:var(--text);padding:16px}
+#chat{width:100%;height:100%;display:flex;flex-direction:column;justify-content:flex-end;gap:8px}
+.message{display:flex;gap:10px;align-items:flex-start;max-width:100%;animation:in .22s ease-out;filter:drop-shadow(0 2px 4px rgba(0,0,0,.35));--platform:#fff}
+.message.twitch{--platform:#9147ff}
+.message.kick{--platform:#53e000}
+.message.cng{--platform:#ff8a00}
+.message.tiktok{--platform:#25f4ee}
+.message.youtube{--platform:#ff0000}
+.avatar{width:36px;height:36px;min-width:36px;border-radius:50%;object-fit:cover;background:#202127;border:2px solid var(--border)}
+.content{min-width:0;max-width:calc(100% - 46px);background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--platform);border-radius:10px;padding:7px 10px 8px;backdrop-filter:blur(5px)}
+.head{display:flex;align-items:center;gap:7px;line-height:1.1;margin-bottom:3px}
+.platform{font-size:10px;font-weight:800;letter-spacing:.7px;color:var(--platform)}
+.name{font-size:13px;font-weight:750;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badges{display:flex;gap:3px;flex-wrap:wrap}
+.badge{font-size:9px;padding:2px 4px;border-radius:4px;background:rgba(255,255,255,.12);color:#ddd}
+.text{font-size:14px;line-height:1.45;word-wrap:break-word;white-space:pre-wrap;overflow-wrap:anywhere;font-family:Inter,Segoe UI,Arial,"Noto Color Emoji","Segoe UI Emoji","Apple Color Emoji",sans-serif}
+.chat-emote{height:28px;width:auto;max-width:96px;vertical-align:middle;object-fit:contain;margin:0 1px}
+.twitch .chat-emote{height:28px}
+.kick .chat-emote{height:28px}
+.cng-emote{height:28px}
+.tiktok-emote{height:28px}
+.youtube-emote{height:28px}
+/* ============================================================
+   CHAT LAYOUT VARIANTS
+   ============================================================ */
+
+/* CLASSIC — clean card */
+#chat.style-classic{gap:8px}
+#chat.style-classic .message{gap:10px}
+#chat.style-classic .avatar{width:36px;height:36px;min-width:36px;border-radius:50%}
+#chat.style-classic .content{background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--platform);border-radius:10px;padding:7px 10px 8px}
+
+/* MINIMAL — typography first, almost no panel */
+#chat.style-minimal{gap:4px;padding:2px}
+#chat.style-minimal .message{gap:7px;filter:none;align-items:center}
+#chat.style-minimal .avatar{width:28px;height:28px;min-width:28px;border:1px solid rgba(255,255,255,.22)}
+#chat.style-minimal .content{background:transparent;border:0;border-left:2px solid var(--platform);border-radius:0;padding:2px 7px;backdrop-filter:none}
+#chat.style-minimal .head{display:inline-flex;margin:0 6px 0 0;vertical-align:baseline}
+#chat.style-minimal .platform{font-size:8px;opacity:.8}
+#chat.style-minimal .name{font-size:12px}
+#chat.style-minimal .text{display:inline;font-size:13px;line-height:1.3}
+
+/* BUBBLE — rounded speech bubble */
+#chat.style-bubble{gap:10px}
+#chat.style-bubble .message{gap:8px}
+#chat.style-bubble .avatar{width:40px;height:40px;min-width:40px;border:3px solid var(--platform);box-shadow:0 2px 8px rgba(0,0,0,.35)}
+#chat.style-bubble .content{background:rgba(22,24,32,.95);border:1px solid rgba(255,255,255,.10);border-left:0;border-radius:20px 20px 20px 5px;padding:9px 13px 10px}
+#chat.style-bubble .head{margin-bottom:4px}
+#chat.style-bubble .platform{font-size:9px;text-transform:uppercase}
+#chat.style-bubble .text{font-size:14px;line-height:1.4}
+
+/* COMPACT — dense full-width strips */
+#chat.style-compact{gap:3px;padding:0}
+#chat.style-compact .message{gap:0;width:100%;filter:none}
+#chat.style-compact .avatar{display:none}
+#chat.style-compact .content{width:100%;max-width:100%;background:rgba(7,8,11,.90);border:0;border-left:4px solid var(--platform);border-radius:2px;padding:4px 8px}
+#chat.style-compact .head{gap:5px;margin-bottom:1px}
+#chat.style-compact .platform{font-size:8px}
+#chat.style-compact .name{font-size:11px}
+#chat.style-compact .text{font-size:12px;line-height:1.25}
+#chat.style-compact .chat-emote{height:22px}
+
+/* NEON — angular gaming HUD */
+#chat.style-neon{gap:11px;padding:5px 3px}
+#chat.style-neon .message{gap:8px;position:relative;filter:drop-shadow(0 0 8px color-mix(in srgb,var(--platform) 32%,transparent))}
+#chat.style-neon .avatar{width:38px;height:38px;min-width:38px;border:2px solid var(--platform);border-radius:8px;transform:skew(-4deg);box-shadow:0 0 12px color-mix(in srgb,var(--platform) 55%,transparent)}
+#chat.style-neon .content{position:relative;overflow:hidden;background:linear-gradient(100deg,rgba(3,5,10,.97),rgba(10,12,20,.94));border:1px solid color-mix(in srgb,var(--platform) 65%,transparent);border-left:5px solid var(--platform);border-radius:2px 10px 10px 2px;padding:8px 12px 9px;box-shadow:inset 0 0 18px color-mix(in srgb,var(--platform) 12%,transparent),0 0 14px color-mix(in srgb,var(--platform) 18%,transparent)}
+#chat.style-neon .content::before{content:"";position:absolute;left:0;right:0;top:0;height:1px;background:var(--platform);box-shadow:0 0 8px var(--platform)}
+#chat.style-neon .content::after{content:"";position:absolute;right:-18px;bottom:-18px;width:50px;height:50px;border:1px solid color-mix(in srgb,var(--platform) 45%,transparent);transform:rotate(45deg)}
+#chat.style-neon .platform{font-size:8px;font-weight:900;letter-spacing:1.4px;text-shadow:0 0 8px var(--platform)}
+#chat.style-neon .name{font-size:13px}
+#chat.style-neon .text{font-size:14px;line-height:1.4}
+
+/* FANCY — premium streamer card */
+#chat.style-fancy{gap:13px;padding:6px 2px}
+#chat.style-fancy .message{gap:0;position:relative;padding-left:18px;filter:drop-shadow(0 8px 18px rgba(0,0,0,.40))}
+#chat.style-fancy .avatar{position:relative;z-index:3;width:48px;height:48px;min-width:48px;margin-top:8px;margin-right:-12px;border:2px solid var(--platform);box-shadow:0 0 0 3px rgba(8,9,13,.94),0 0 18px color-mix(in srgb,var(--platform) 48%,transparent)}
+#chat.style-fancy .content{position:relative;z-index:2;flex:1;max-width:calc(100% - 6px);overflow:visible;background:linear-gradient(135deg,rgba(27,29,40,.97),rgba(7,9,15,.96));border:1px solid rgba(255,255,255,.14);border-left:0;border-radius:5px 15px 15px 5px;padding:9px 15px 11px 27px;backdrop-filter:blur(10px);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),inset 0 -12px 28px rgba(0,0,0,.22)}
+#chat.style-fancy .content::before{content:"";position:absolute;left:0;top:-1px;bottom:-1px;width:4px;background:var(--platform);border-radius:5px 0 0 5px;box-shadow:0 0 15px color-mix(in srgb,var(--platform) 58%,transparent)}
+#chat.style-fancy .content::after{content:"◆";position:absolute;right:12px;top:8px;font-size:8px;color:var(--platform);opacity:.9;text-shadow:0 0 9px var(--platform)}
+#chat.style-fancy .head{gap:7px;margin-bottom:5px;min-height:17px}
+#chat.style-fancy .platform{order:0;font-size:8px;font-weight:900;letter-spacing:1px;padding:3px 6px;border-radius:3px;background:color-mix(in srgb,var(--platform) 15%,transparent);border:1px solid color-mix(in srgb,var(--platform) 45%,transparent);text-shadow:0 0 7px color-mix(in srgb,var(--platform) 60%,transparent)}
+#chat.style-fancy .name{order:1;font-size:13px;font-weight:800}
+#chat.style-fancy .badges{order:2}
+#chat.style-fancy .badge{font-size:8px;padding:2px 4px;border-radius:3px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.08)}
+#chat.style-fancy .text{font-size:14px;line-height:1.42;color:#f2f2f5;text-shadow:0 1px 1px rgba(0,0,0,.4)}
+#chat.style-fancy .chat-emote{height:30px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.4))}
+
+@keyframes in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes out{from{opacity:1;transform:translateY(0);max-height:300px}
+                to{opacity:0;transform:translateY(-4px);max-height:0;margin-top:-8px}}
+@keyframes messageOut{
+  from{
+    opacity:1;
+    transform:translateY(0);
+    max-height:500px;
+  }
+  to{
+    opacity:0;
+    transform:translateY(-5px);
+    max-height:0;
+    margin-top:0;
+    padding-top:0;
+    padding-bottom:0;
+  }
+}
+</style>
+</head>
+<body>
+<div id="chat"></div>
+<script>
+const CONFIG={
+  maxMessages:14,
+  bridge:`${window.location.origin}/events`,
+  autoHideMessages:true,
+  messageLifetimeSeconds:10,
+  chatLayout:"classic"
+};
+const chat=document.getElementById("chat");
+const DISPLAY_CONFIG={
+  autoHideMessages:true,
+  messageLifetimeSeconds:10,
+  chatLayout:"classic",
+  chatStyle:"classic"
+};
+
+async function loadDisplayConfig(){
+  try{
+    const response=await fetch(
+      `${window.location.origin}/config`,
+      {cache:"no-store"}
+    );
+
+    if(!response.ok){
+      throw new Error("HTTP "+response.status);
+    }
+
+    const data=await response.json();
+
+    applyDisplayConfig(data);
+
+    console.log(
+      "[CNG MultiChat] Layout:",
+      DISPLAY_CONFIG.chatStyle,
+      "| Auto-Hide:",
+      DISPLAY_CONFIG.autoHideMessages,
+      "|",
+      DISPLAY_CONFIG.messageLifetimeSeconds+"s"
+    );
+  }catch(err){
+    console.warn(
+      "[CNG MultiChat] Anzeigeeinstellungen konnten nicht geladen werden:",
+      err
+    );
+  }
+}
+
+function applyDisplayConfig(data){
+  if(!data || typeof data!=="object") return;
+
+  if(Object.prototype.hasOwnProperty.call(data,"auto_hide_messages")){
+    DISPLAY_CONFIG.autoHideMessages=Boolean(data.auto_hide_messages);
+  }
+
+  const seconds=Number(data.message_lifetime_seconds);
+  if(Number.isFinite(seconds)){
+    DISPLAY_CONFIG.messageLifetimeSeconds=Math.max(1,Math.min(300,seconds));
+  }
+
+  const allowedStyles=["classic","minimal","bubble","compact","neon","fancy"];
+  const style=String(data.chat_layout||data.chat_style||"classic").toLowerCase();
+  DISPLAY_CONFIG.chatLayout=style;
+  DISPLAY_CONFIG.chatStyle=allowedStyles.includes(style)?style:"classic";
+
+  chat.className="style-"+DISPLAY_CONFIG.chatStyle;
+
+  console.log("[CNG MultiChat] Live-Layout:",DISPLAY_CONFIG.chatStyle);
+}
+
+function connectDisplayConfigEvents(){
+  const es=new EventSource(`${window.location.origin}/config-events`);
+
+  es.onopen=()=>{
+    console.log("[CNG MultiChat] Display-Config Live-Verbindung verbunden");
+  };
+
+  es.onmessage=e=>{
+    try{
+      const data=JSON.parse(e.data);
+      if(data.type==="display_config"){
+        applyDisplayConfig(data);
+      }
+    }catch(err){
+      console.warn("[CNG MultiChat] Display-Config JSON-Fehler:",err);
+    }
+  };
+
+  es.onerror=()=>{
+    console.warn("[CNG MultiChat] Display-Config Live-Verbindung getrennt - Reconnect durch Browser");
+  };
+}
+
+
+// Reload display settings periodically so changes to display_settings.json
+// can take effect without restarting the bridge or OBS browser source.
+setInterval(loadDisplayConfig, 30000);
+connectDisplayConfigEvents();
+
+
+function esc(v){
+  return String(v??"").replace(/[&<>"']/g,c=>({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+  }[c]));
+}
+
+function safeUrl(v){
+  try{
+    const u=new URL(v);
+    return (u.protocol==="https:"||u.protocol==="http:") ? u.href : "";
+  }catch{return ""}
+}
+
+function plat(v){
+  v=String(v||"").toLowerCase();
+  return ["kick","twitch","tiktok","cng","youtube"].includes(v)?v:"system";
+}
+
+function pname(v){
+  return({kick:"KICK",twitch:"TWITCH",tiktok:"TIKTOK",cng:"CNG",youtube:"YOUTUBE",system:"CHAT"})[v]||"CHAT";
+}
+
+/* Kick sends native emotes in the form:
+   [emote:4147902:KEKBye]
+   Kick's emote CDN uses /emotes/{id}/fullsize. */
+function renderKick(text){
+  let out="";
+  let last=0;
+  const re=/\[emote:(\d+):([^\]]+)\]/g;
+  let m;
+
+  while((m=re.exec(String(text??"")))!==null){
+    out+=esc(String(text).slice(last,m.index));
+
+    const url="https://files.kick.com/emotes/"+m[1]+"/fullsize";
+    out+=`<img class="chat-emote" src="${url}" alt="${esc(m[2])}" title="${esc(m[2])}" onerror="this.replaceWith(document.createTextNode(${JSON.stringify(m[2])}))">`;
+
+    last=m.index+m[0].length;
+  }
+
+  out+=esc(String(text??"").slice(last));
+  return out;
+}
+
+/* Twitch IRC gives emote ranges like:
+   25:0-4/1902:6-10
+   Twitch ranges are UTF-16 indexes, so JS substring is exactly what we need. */
+function renderTwitch(text, raw){
+  const source=String(text??"");
+  const spec=String(raw??"");
+  if(!spec) return esc(source);
+
+  const ranges=[];
+
+  for(const group of spec.split("/")){
+    const parts=group.split(":");
+    if(parts.length<2) continue;
+
+    const id=parts[0];
+
+    for(const range of parts[1].split(",")){
+      const p=range.split("-");
+      if(p.length!==2) continue;
+
+      const start=Number(p[0]);
+      const end=Number(p[1]);
+
+      if(Number.isInteger(start)&&Number.isInteger(end)&&start>=0&&end>=start){
+        ranges.push({id,start,end});
+      }
+    }
+  }
+
+  ranges.sort((a,b)=>a.start-b.start);
+
+  let out="";
+  let pos=0;
+
+  for(const r of ranges){
+    if(r.start<pos) continue;
+
+    out+=esc(source.slice(pos,r.start));
+
+    const emoteText=source.slice(r.start,r.end+1);
+    const url=`https://static-cdn.jtvnw.net/emoticons/v2/${encodeURIComponent(r.id)}/default/dark/3.0`;
+
+    out+=`<img class="chat-emote" src="${url}" alt="${esc(emoteText)}" title="${esc(emoteText)}" onerror="this.replaceWith(document.createTextNode(${JSON.stringify(emoteText)}))">`;
+
+    pos=r.end+1;
+  }
+
+  out+=esc(source.slice(pos));
+  return out;
+}
+
+const CNG_EMOTES = {
+  ":happy:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-happy-dd9c2PYTAEzo843pAuC5HA.webp",
+  ":wink:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-wink-8EntH6XLqXhbdYNcwAcvA2.webp",
+  ":sad:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-sad-buqEk7HWyP8qkVFndko5m4.webp",
+  ":evil:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-evil-SPeQQjGqPXviqfyAkLD5mB.webp",
+  ":angry:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-angry-QWLYj2xAEFtuzPVF6vRQye.webp",
+  ":love:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-love-VxomXxRhM386U9AaBLtQVy.webp",
+  ":hype:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-hype-FPWCK2kLHz6pSMbQvKod2R.webp",
+  ":shocked:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-shocked-CUk8EEBja4nsPx3SYxYvmG.webp",
+  ":cool:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-cool-Vjoar8GadCW8M4LeoMwHvm.webp",
+  ":thinking:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-thinking-UeQC2VRu22SajWSj2NfgT9.webp",
+  ":nervous:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-nervous-Hv84Nm5cGddpC8askYnQiS.webp",
+  ":blush:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-blush-YVgbviX29mL7sk5eabZ9u9.webp",
+  ":dizzy:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-dizzy-nuAg4ctMRnw5VDLuhWo2C6.webp",
+  ":sick:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-sick-FNjHdUu3mxMfSiHYwfZmWH.webp"
+};
+
+function renderCng(text, emotes){
+  const source=String(text??"");
+  const list=Array.isArray(emotes)?emotes:[];
+
+  // The bridge already resolves CNG :name: tokens to the exact image URLs
+  // returned by CNG. Prefer those URLs; the local map is only a fallback.
+  const resolved=list
+    .map(e=>({
+      token:String(e?.token||e?.name||"").trim(),
+      url:safeUrl(e?.url||e?.image_url||e?.imageUrl||e?.src||""),
+      start:Number(e?.start),
+      end:Number(e?.end),
+      name:String(e?.name||e?.token||"").trim()
+    }))
+    .filter(e=>e.url);
+
+  if(!resolved.length){
+    let out="";
+    const re=/:([a-zA-Z0-9_]+):/g;
+    let last=0;
+    let m;
+    while((m=re.exec(source))!==null){
+      const token=m[0];
+      const url=safeUrl(CNG_EMOTES[token.toLowerCase()]||"");
+      if(!url) continue;
+      out+=esc(source.slice(last,m.index));
+      out+=`<img class="chat-emote cng-emote" src="${esc(url)}" alt="${esc(m[1])}" title="${esc(m[1])}" onerror="this.replaceWith(document.createTextNode(${JSON.stringify(token)}))">`;
+      last=m.index+token.length;
+    }
+    return out+esc(source.slice(last));
+  }
+
+  // Preferred path: bridge supplied character positions.
+  const ranged=resolved
+    .filter(e=>Number.isInteger(e.start)&&Number.isInteger(e.end)&&e.start>=0&&e.end>=e.start&&e.end<source.length)
+    .sort((a,b)=>a.start-b.start);
+
+  if(ranged.length){
+    let out="";
+    let pos=0;
+    let used=false;
+    for(const e of ranged){
+      if(e.start<pos) continue;
+      const token=source.slice(e.start,e.end+1);
+      out+=esc(source.slice(pos,e.start));
+      out+=`<img class="chat-emote cng-emote" src="${esc(e.url)}" alt="${esc(e.name||token)}" title="${esc(e.name||token)}" onerror="this.replaceWith(document.createTextNode(${JSON.stringify(token)}))">`;
+      pos=e.end+1;
+      used=true;
+    }
+    if(used) return out+esc(source.slice(pos));
+  }
+
+  // Final fallback: match the exact token from the bridge by text.
+  let out="";
+  let pos=0;
+  for(const e of resolved){
+    const token=e.token;
+    if(!token) continue;
+    const i=source.indexOf(token,pos);
+    if(i<0) continue;
+    out+=esc(source.slice(pos,i));
+    out+=`<img class="chat-emote cng-emote" src="${esc(e.url)}" alt="${esc(e.name||token)}" title="${esc(e.name||token)}" onerror="this.replaceWith(document.createTextNode(${JSON.stringify(token)}))">`;
+    pos=i+token.length;
+  }
+  return out+esc(source.slice(pos));
+}
+
+function ttUrlFromObject(x){
+  if(!x) return "";
+  if(typeof x==="string"){
+    return /^https?:\/\//i.test(x) &&
+      /(tiktokcdn|ibytedtos|muscdn|byteimg|p16-|p19-|p77-|p9-)/i.test(x)
+      ? x : "";
+  }
+  if(Array.isArray(x)){
+    for(const v of x){
+      const u=ttUrlFromObject(v);
+      if(u) return u;
+    }
+    return "";
+  }
+  if(typeof x==="object"){
+    for(const k of ["url","image_url","imageUrl","uri","src"]){
+      if(x[k]){
+        const u=ttUrlFromObject(x[k]);
+        if(u) return u;
+      }
+    }
+    for(const k of Object.keys(x)){
+      const u=ttUrlFromObject(x[k]);
+      if(u) return u;
+    }
+  }
+  return "";
+}
+
+function renderYouTube(text, emotes){
+  const source=String(text??"");
+  const list=Array.isArray(emotes)?emotes:[];
+  if(!list.length) return esc(source);
+
+  const items=list.map(e=>({
+    url:safeUrl(e?.url||e?.image_url||e?.imageUrl||e?.src||""),
+    start:Number(e?.start),
+    end:Number(e?.end),
+    token:String(e?.token||""),
+    name:String(e?.name||e?.id||"")
+  })).filter(e=>e.url);
+
+  let out="";
+  let cursor=0;
+
+  // Preferred: bridge supplies character positions.
+  for(const e of items.sort((a,b)=>(a.start||1e9)-(b.start||1e9))){
+    if(Number.isInteger(e.start)&&Number.isInteger(e.end)
+       &&e.start>=cursor&&e.end<source.length){
+      out+=esc(source.slice(cursor,e.start));
+      const token=source.slice(e.start,e.end+1);
+      out+=`<img class="chat-emote youtube-emote" src="${esc(e.url)}" alt="${esc(e.name||token)}" title="${esc(e.name||token)}" onerror="this.replaceWith(document.createTextNode(${JSON.stringify(token)}))">`;
+      cursor=e.end+1;
+    }
+  }
+
+  if(cursor) return out+esc(source.slice(cursor));
+
+  // Fallback: replace the token supplied by the bridge.
+  out="";
+  cursor=0;
+
+  for(const e of items){
+    let token=e.token;
+
+    if(!token) continue;
+
+    // Support both plain token and [token] forms.
+    if(!source.includes(token)){
+      const bracketed="["+token.replace(/^\[|\]$/g,"")+"]";
+      if(source.includes(bracketed)) token=bracketed;
+    }
+
+    if(!source.includes(token)) continue;
+
+    const i=source.indexOf(token,cursor);
+    if(i<0) continue;
+
+    out+=esc(source.slice(cursor,i));
+    out+=`<img class="chat-emote youtube-emote" src="${esc(e.url)}" alt="${esc(e.name||token)}" title="${esc(e.name||token)}" onerror="this.replaceWith(document.createTextNode(${JSON.stringify(token)}))">`;
+    cursor=i+token.length;
+  }
+
+  return out+esc(source.slice(cursor));
+}
+
+function renderTikTok(text, emotes){
+  const source=String(text??"");
+  const list=Array.isArray(emotes)?emotes:[];
+  if(!list.length) return esc(source);
+
+  const ranges=list
+    .map(e=>({
+      url:safeUrl(e?.url||e?.image_url||e?.imageUrl||e?.src||""),
+      start:Number(e?.start),
+      end:Number(e?.end),
+      token:String(e?.token||""),
+      name:String(e?.name||e?.emoteId||e?.token||"")
+    }))
+    .filter(e=>e.url && Number.isInteger(e.start) && Number.isInteger(e.end))
+    .sort((a,b)=>a.start-b.start);
+
+  if(ranges.length){
+    let out="";
+    let pos=0;
+    for(const r of ranges){
+      if(r.start<pos || r.start<0 || r.end<r.start || r.end>=source.length) continue;
+      out+=esc(source.slice(pos,r.start));
+      const token=source.slice(r.start,r.end+1);
+      out+=`<img class="chat-emote tiktok-emote" src="${esc(r.url)}" alt="${esc(r.name||token)}" title="${esc(r.name||token)}" onerror="this.replaceWith(document.createTextNode(${JSON.stringify(token)}))">`;
+      pos=r.end+1;
+    }
+    out+=esc(source.slice(pos));
+    return out;
+  }
+
+  // Token fallback: newer TikTokLive builds can expose the emote URL while
+  // the character index is not usable as a JavaScript string offset.
+  let out="";
+  let pos=0;
+  for(const r of list){
+    const url=safeUrl(r?.url||r?.image_url||r?.imageUrl||r?.src||"");
+    const token=String(r?.token||"");
+    if(!url || !token) continue;
+    const idx=source.indexOf(token,pos);
+    if(idx<0) continue;
+    out+=esc(source.slice(pos,idx));
+    out+=`<img class="chat-emote tiktok-emote" src="${esc(url)}" alt="${esc(r?.name||token)}" title="${esc(r?.name||token)}" onerror="this.replaceWith(document.createTextNode(${JSON.stringify(token)}))">`;
+    pos=idx+token.length;
+  }
+  out+=esc(source.slice(pos));
+  return out;
+}
+
+function renderMessage(d){
+  const p=plat(d.platform);
+
+  if(p==="twitch")
+    return renderTwitch(d.message,d.twitchEmotes);
+
+  if(p==="kick")
+    return renderKick(d.message);
+
+  if(p==="cng")
+    return renderCng(d.message,d.cngEmotes||d.cng_emotes||[]);
+
+  if(p==="tiktok")
+    return renderTikTok(d.message,d.tiktokEmotes);
+
+  if(p==="youtube")
+    return renderYouTube(
+      d.message,
+      d.youtubeEmotes||d.youtube_emotes||d.emotes||d.emoteList||[]
+    );
+
+  return esc(d.message||"");
+}
+
+function addMessage(d){
+  const p=plat(d.platform);
+  const e=document.createElement("div");
+  e.className="message "+p;
+
+  const CNG_DEFAULT_AVATAR="https://cng-beta.webuniverse-dresden.dev/assets/brand/cng-logo.png";
+
+  // Creator/Watcher is supplied by the bridge. A Creator must NEVER be
+  // replaced by the generic CNG fallback merely because its avatar field is
+  // missing/invalid in this message.
+  const rawBadges=Array.isArray(d.badges) ? d.badges : [];
+  const isCngCreator =
+    p==="cng" && (
+      d.isCreator===true ||
+      String(d.viewerType||d.type||d.kind||d.role||"").toLowerCase()==="creator" ||
+      rawBadges.some(b=>String(b||"").toUpperCase()==="CREATOR")
+    );
+
+  const avatarCandidates=[
+    d.avatar,
+    d.avatarUrl,
+    d.creatorAvatar,
+    d.profileImage,
+    d.profileImageUrl
+  ];
+
+  const avatarUrl=avatarCandidates
+    .map(safeUrl)
+    .find(Boolean) || (p==="cng" && !isCngCreator ? CNG_DEFAULT_AVATAR : "");
+
+  const avatar=avatarUrl
+    ? `<img class="avatar" src="${esc(avatarUrl)}" onerror="this.style.visibility='hidden'">`
+    : `<div class="avatar"></div>`;
+
+  const badges=Array.isArray(d.badges)
+    ? d.badges.map(x=>`<span class="badge">${esc(x)}</span>`).join("")
+    : "";
+
+  e.innerHTML=`
+    ${avatar}
+    <div class="content">
+      <div class="head">
+        <span class="platform">${pname(p)}</span>
+        <span class="name">${esc(d.username||"Unbekannt")}</span>
+        <span class="badges">${badges}</span>
+      </div>
+      <div class="text">${renderMessage(d)}</div>
+    </div>`;
+
+  chat.appendChild(e);
+  if(DISPLAY_CONFIG.autoHideMessages){
+    const lifetime=DISPLAY_CONFIG.messageLifetimeSeconds*1000;
+
+    e.dataset.autoHideTimer="1";
+
+    setTimeout(()=>{
+      if(!e.isConnected) return;
+
+      e.style.animation="messageOut .18s ease forwards";
+
+      setTimeout(()=>{
+        if(e.isConnected) e.remove();
+      },180);
+    },lifetime);
+  }
+
+
+
+
+  while(chat.children.length>CONFIG.maxMessages)
+    chat.firstElementChild.remove();
+}
+
+window.UnifiedChat={
+  add:addMessage,
+  clear:()=>chat.replaceChildren()
+};
+
+loadDisplayConfig().finally(()=>{
+  const es=new EventSource(CONFIG.bridge);
+
+  es.onopen=()=>console.log("[Unified] Bridge verbunden");
+
+  es.onmessage=e=>{
+    try{
+      const data=JSON.parse(e.data);
+      if(data && data.type==="cng_viewers") return;
+      addMessage(data);
+    }catch(err){
+      console.error("[Unified] JSON-Fehler",err);
+    }
+  };
+
+  es.onerror=()=>console.warn(
+    "[Unified] Bridge getrennt - automatischer Reconnect"
+  );
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+CNG MultiChat Manager - Windows-Paket
+
+Start: CNG_MultiChat_Manager.exe
+Der Manager startet die Bridge bei Bedarf selbst.
+Anleitung: CNG_MultiChat_Installations_und_Benutzeranleitung.pdf
+HTML-Ressourcen: alerts.html, cng-multichat-livechat.html, cng-multichat-overlay.html und cng-multichat-overlay_horizontal.html
+Lizenz: MIT (siehe LICENSE)
+Bitte den gesamten Ordner entpackt lassen und an einen beschreibbaren Ort verschieben.
+Konfigurationen und Logs werden neben dem Programm abgelegt.
+Autostart, minimierter Start und Minimieren ins Tray koennen im Manager unter Einstellungen aktiviert werden.
+Schliessen ueber X blendet den Manager ins Tray aus; vollstaendiges Beenden ueber das Tray-Menue.
+Python muss auf dem Ziel-PC nicht installiert sein.

@@ -1,0 +1,127 @@
+@echo off
+setlocal
+cd /d "%~dp0"
+
+set "PYI=.buildenv\Scripts\python.exe"
+for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd_HHmmss_fff"') do set "BUILD_TAG=%%i"
+if not defined BUILD_TAG (
+    echo FEHLER: Zeitstempel fuer den Build-Ausgabeordner konnte nicht erzeugt werden.
+    goto :fail
+)
+set "RELEASE_DIR=release\CNG_MultiChat_Manager_%BUILD_TAG%"
+
+if not exist "CNG_MultiChat_Manager.py" (
+    echo FEHLER: CNG_MultiChat_Manager.py fehlt neben dieser Datei.
+    goto :fail
+)
+if not exist "unified_chat_bridge.py" (
+    echo FEHLER: unified_chat_bridge.py fehlt neben dieser Datei.
+    goto :fail
+)
+for %%F in (alerts.html cng-multichat-livechat.html cng-multichat-overlay.html cng-multichat-overlay_horizontal.html) do (
+    if not exist "%%F" (
+        echo FEHLER: %%F fehlt neben dieser Datei und muss im Release enthalten sein.
+        goto :fail
+    )
+)
+if not exist "CNG_MultiChat_Installations_und_Benutzeranleitung.pdf" (
+    echo FEHLER: Die Installations- und Benutzeranleitung fehlt neben dieser Datei.
+    echo Die Dokumentation muss im Buildkit enthalten sein.
+    goto :fail
+)
+if not exist "LICENSE" (
+    echo FEHLER: Die MIT-Lizenzdatei LICENSE fehlt neben dieser Datei.
+    echo Die Lizenz muss im Buildkit enthalten sein.
+    goto :fail
+)
+
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$m = Get-Content -Raw -LiteralPath 'CNG_MultiChat_Manager.py'; $b = Get-Content -Raw -LiteralPath 'unified_chat_bridge.py'; if ($m -notmatch 'BRIDGE_EXE = os\.path\.join\(BASE_DIR, .UnifiedChatBridge\.exe.\)' -or $m -notmatch '(?s)taskkill.{0,200}/T.{0,50}/F' -or $m -notmatch 'set_windows_startup' -or $m -notmatch 'start_minimized' -or $m -notmatch 'minimize_to_tray' -or $b -notmatch 'sys\.executable if getattr\(sys, .frozen., False\) else __file__') { exit 1 }"
+if errorlevel 1 (
+    echo FEHLER: Die Python-Quelldateien in diesem Ordner enthalten noch nicht die Verpackungs-Korrekturen.
+    echo Bitte das aktuelle Buildkit entpacken und alle enthaltenen Dateien hier ueberschreiben.
+    goto :fail
+)
+
+if not exist "%PYI%" (
+    echo Erstelle isolierte Build-Umgebung ...
+    where py >nul 2>&1
+    if not errorlevel 1 (
+        py -3 -m venv .buildenv
+    ) else (
+        where python >nul 2>&1
+        if errorlevel 1 (
+            echo FEHLER: Python 3 wurde nicht gefunden. Installiere Python 3 und aktiviere "Add Python to PATH".
+            goto :fail
+        )
+        python -m venv .buildenv
+    )
+    if errorlevel 1 goto :fail
+
+)
+
+echo Installiere oder pruefe Build-Werkzeuge und Programmabhaengigkeiten ...
+"%PYI%" -m pip install --upgrade pip
+if errorlevel 1 goto :fail
+"%PYI%" -m pip install pyinstaller requests websocket-client TikTokLive Pillow pystray
+if errorlevel 1 goto :fail
+
+echo Erzeuge Bridge-EXE ...
+"%PYI%" -m PyInstaller --clean --noconfirm --onefile --console ^
+    --name UnifiedChatBridge ^
+    --distpath build\bridge-dist --workpath build\bridge-work --specpath build\spec ^
+    --collect-all TikTokLive --copy-metadata TikTokLive --hidden-import websocket ^
+    unified_chat_bridge.py
+if errorlevel 1 goto :fail
+
+echo Erzeuge Manager-EXE ...
+"%PYI%" -m PyInstaller --clean --noconfirm --onedir --windowed ^
+    --name CNG_MultiChat_Manager ^
+    --distpath "%RELEASE_DIR%" --workpath build\manager-work --specpath build\spec ^
+    --collect-all TikTokLive --copy-metadata TikTokLive ^
+    --collect-all pystray --collect-all PIL --hidden-import websocket ^
+    CNG_MultiChat_Manager.py
+if errorlevel 1 goto :fail
+
+copy /y "build\bridge-dist\UnifiedChatBridge.exe" "%RELEASE_DIR%\CNG_MultiChat_Manager\UnifiedChatBridge.exe" >nul
+if errorlevel 1 goto :fail
+
+for %%F in (alerts.html cng-multichat-livechat.html cng-multichat-overlay.html cng-multichat-overlay_horizontal.html) do (
+    copy /y "%%F" "%RELEASE_DIR%\CNG_MultiChat_Manager\%%F" >nul
+    if errorlevel 1 goto :fail
+)
+copy /y "CNG_MultiChat_Installations_und_Benutzeranleitung.pdf" "%RELEASE_DIR%\CNG_MultiChat_Manager\CNG_MultiChat_Installations_und_Benutzeranleitung.pdf" >nul
+if errorlevel 1 goto :fail
+copy /y "LICENSE" "%RELEASE_DIR%\CNG_MultiChat_Manager\LICENSE" >nul
+if errorlevel 1 goto :fail
+
+(
+    echo CNG MultiChat Manager - Windows-Paket
+    echo.
+    echo Start: CNG_MultiChat_Manager.exe
+    echo Der Manager startet die Bridge bei Bedarf selbst.
+    echo HTML-Ressourcen: alerts.html, cng-multichat-livechat.html, cng-multichat-overlay.html und cng-multichat-overlay_horizontal.html
+    echo Bitte den gesamten Ordner entpackt lassen und an einen beschreibbaren Ort verschieben.
+    echo Konfigurationen und Logs werden neben dem Programm abgelegt.
+    echo Autostart, minimierter Start und Minimieren ins Tray koennen im Manager unter Einstellungen aktiviert werden.
+    echo Schliessen ueber X blendet den Manager ins Tray aus; vollstaendiges Beenden ueber das Tray-Menue.
+    echo Python muss auf dem Ziel-PC nicht installiert sein.
+    echo Benutzeranleitung: CNG_MultiChat_Installations_und_Benutzeranleitung.pdf
+    echo Lizenz: MIT (siehe LICENSE)
+) > "%RELEASE_DIR%\CNG_MultiChat_Manager\Liesmich.txt"
+
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Compress-Archive -Path '%RELEASE_DIR%\CNG_MultiChat_Manager\*' -DestinationPath '%RELEASE_DIR%\CNG_MultiChat_Manager_Windows.zip' -Force"
+if errorlevel 1 goto :fail
+
+echo.
+echo FERTIG.
+echo Startdatei: %CD%\%RELEASE_DIR%\CNG_MultiChat_Manager\CNG_MultiChat_Manager.exe
+echo Community-ZIP: %CD%\%RELEASE_DIR%\CNG_MultiChat_Manager_Windows.zip
+echo.
+pause
+exit /b 0
+
+:fail
+echo.
+echo BUILD FEHLGESCHLAGEN. Die Fehlermeldung steht weiter oben.
+pause
+exit /b 1

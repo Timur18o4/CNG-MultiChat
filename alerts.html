@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CNG Alerts</title>
+<style>
+html, body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: transparent;
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+#alerts {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+
+.alert {
+    min-width: 420px;
+    max-width: 900px;
+    padding: 26px 34px;
+    border-radius: 18px;
+    background: rgba(20,20,20,.94);
+    border: 2px solid rgba(255,135,0,.95);
+    box-shadow: 0 12px 50px rgba(0,0,0,.55);
+    color: white;
+    text-align: center;
+    opacity: 0;
+    transform: scale(.92) translateY(20px);
+    transition: opacity .25s ease, transform .25s ease;
+}
+
+.alert.show {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+}
+
+.type {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+}
+
+.gif {
+    display: block;
+    max-width: 360px;
+    max-height: 220px;
+    margin: 0 auto 14px;
+    object-fit: contain;
+    border-radius: 10px;
+}
+
+.user {
+    font-size: 32px;
+    font-weight: 800;
+    margin-bottom: 8px;
+}
+
+.message {
+    font-size: 24px;
+    line-height: 1.3;
+}
+</style>
+</head>
+
+<body>
+<div id="alerts"></div>
+
+<script>
+// The bridge sends GIF/sound alerts through the dedicated alert stream.
+// Chat/system messages are handled by the separate chat overlay.
+// Local OBS browser source: connect to the local bridge, not the file:// origin.
+// This is the bridge's local transport; CNG itself is polled over its legacy API.
+const BRIDGE_BASE_URL = "http://127.0.0.1:8765";
+const ENDPOINTS = [
+    `${BRIDGE_BASE_URL}/alert-events`
+];
+const seenAlertIds = new Set();
+
+const FALLBACK_SETTINGS = {
+    follow: {
+        label: "Follow",
+        gif: "",
+        sound: "",
+        duration_seconds: 7
+    },
+    donation: {
+        label: "Coin Donation",
+        gif: "",
+        sound: "",
+        duration_seconds: 5
+    },
+    unfollow: {
+        label: "Unfollow",
+        gif: "",
+        sound: "",
+        duration_seconds: 5
+    },
+    raid: {
+        label: "Raid",
+        gif: "",
+        sound: "",
+        duration_seconds: 5
+    }
+};
+
+const alerts = document.getElementById("alerts");
+let queue = [];
+let showing = false;
+
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function mediaUrl(value) {
+    let v = String(value || "").trim();
+    if (!v) return "";
+    if (/^(https?:|file:|data:|blob:)/i.test(v)) return v;
+
+    // Windows path -> file:/// URL. encodeURI keeps / and : but escapes
+    // spaces and non-ASCII characters correctly for Chromium/OBS.
+    if (/^[A-Za-z]:[\\/]/.test(v)) {
+        v = v.replace(/\\/g, "/");
+        return "file:///" + encodeURI(v);
+    }
+    return encodeURI(v);
+}
+
+function enqueueAlert(event) {
+    const type = String(event.alertType || "").trim().toLowerCase();
+    const fallback = FALLBACK_SETTINGS[type] || {};
+    console.log("[CNG ALERT] Wird angezeigt:", type, event.username, event);
+    queue.push({
+        type,
+        username: String(event.username || "Unbekannt"),
+        message: String(event.message || ""),
+        label: String(event.label || fallback.label || type),
+        gif: mediaUrl(event.gif || fallback.gif),
+        sound: mediaUrl(event.sound || fallback.sound),
+        duration: Math.max(1, Math.min(300, Number(event.duration_seconds || fallback.duration_seconds || 5)))
+    });
+    showNext();
+}
+
+function showNext() {
+    if (showing || queue.length === 0) return;
+
+    showing = true;
+    const alert = queue.shift();
+
+    const box = document.createElement("div");
+    box.className = "alert";
+
+    const gifHtml = alert.gif
+        ? `<img class="gif" src="${escapeHtml(alert.gif)}" alt="" onerror="console.warn('[CNG ALERT] GIF konnte nicht geladen werden:', this.src); this.style.display='none';">`
+        : "";
+
+    box.innerHTML = `
+        <div class="type">${escapeHtml(alert.label)}</div>
+        ${gifHtml}
+        <div class="user">${escapeHtml(alert.username)}</div>
+        <div class="message">${escapeHtml(alert.message)}</div>
+    `;
+
+    alerts.replaceChildren(box);
+
+    let audio = null;
+    if (alert.sound) {
+        audio = document.createElement("audio");
+        audio.src = alert.sound;
+        audio.preload = "auto";
+        audio.volume = 1.0;
+        audio.muted = false;
+        audio.setAttribute("playsinline", "");
+        audio.setAttribute("autoplay", "true");
+        audio.addEventListener("canplaythrough", () => {
+            console.log("[CNG ALERT] Sound geladen:", alert.sound);
+        }, { once: true });
+        audio.addEventListener("error", () => {
+            console.warn("[CNG ALERT] Sound konnte nicht geladen werden:", alert.sound, audio.error);
+        });
+        document.body.appendChild(audio);
+        audio.play().catch(error => {
+            console.warn("[CNG ALERT] Sound konnte nicht abgespielt werden:", error);
+        });
+    }
+
+    requestAnimationFrame(() => box.classList.add("show"));
+
+    setTimeout(() => {
+        box.classList.remove("show");
+        setTimeout(() => {
+            box.remove();
+            if (audio) {
+                audio.pause();
+                audio.remove();
+            }
+            showing = false;
+            showNext();
+        }, 300);
+    }, alert.duration * 1000);
+}
+
+function processEvent(msg) {
+    if (!msg || msg.platform !== "cng") return;
+    if (msg.event !== "alert") return;
+
+    const type = String(msg.alertType || "").trim().toLowerCase();
+
+    // Exactly the same mechanism as Follow / Coin Donation:
+    // determine the alert type, then enqueue it. Unfollow is simply another type.
+    if (type === "donation") {
+        enqueueAlert(msg);
+        return;
+    }
+
+    if (type === "follow") {
+        enqueueAlert(msg);
+        return;
+    }
+
+    if (type === "unfollow") {
+        enqueueAlert(msg);
+        return;
+    }
+
+    if (type === "raid") {
+        enqueueAlert(msg);
+        return;
+    }
+
+    console.warn("[CNG ALERT] Unbekannter alertType:", type, msg);
+}
+
+function connect(endpoint) {
+    const source = new EventSource(endpoint);
+
+    source.onopen = () => {
+        console.log("[CNG ALERT] Mit lokalem Bridge-Alertstream verbunden:", endpoint);
+    };
+
+    source.onmessage = event => {
+        try {
+            const msg = JSON.parse(event.data);
+            console.log("[CNG ALERT] Ereignis empfangen:", msg);
+
+            // Only real alert events reach the OBS alert overlay.
+            if (!msg || msg.event !== "alert") {
+                console.warn("[CNG ALERT] Ignoriert: event ist nicht 'alert'.", msg);
+                return;
+            }
+            if (msg.platform !== "cng") {
+                console.warn("[CNG ALERT] Ignoriert: platform ist nicht 'cng'.", msg);
+                return;
+            }
+
+            // The same alert is present on both SSE streams.
+            // Deduplicate by the stable alertId.
+            // Include the occurrence timestamp so a later re-follow by the
+            // same user is not discarded just because alertId is stable.
+            const id = String(
+                msg.alertId
+                    ? (msg.alertId + ":" + (msg.timestamp ?? Date.now()))
+                    : (msg.alertType + ":" + (msg.userId ?? msg.username ?? "") + ":" + (msg.timestamp ?? Date.now()))
+            );
+
+            if (seenAlertIds.has(id)) return;
+            seenAlertIds.add(id);
+
+            // Keep the set bounded during long-running streams.
+            if (seenAlertIds.size > 1000) {
+                const first = seenAlertIds.values().next().value;
+                seenAlertIds.delete(first);
+            }
+
+            processEvent(msg);
+        } catch (error) {
+            console.error("[CNG ALERT] Ungültige Nachricht:", error);
+        }
+    };
+
+    source.onerror = () => {
+        console.warn("[CNG ALERT] Verbindung zum lokalen Bridge-Alertstream verloren:", endpoint,
+                     "- Browser versucht automatisch neu zu verbinden.");
+    };
+}
+
+ENDPOINTS.forEach(connect);
+</script>
+</body>
+</html>

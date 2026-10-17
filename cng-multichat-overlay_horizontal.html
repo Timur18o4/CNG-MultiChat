@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CNG MultiChat Overlay</title>
+<style>
+:root{--panel:rgba(8,9,13,.82);--border:rgba(255,255,255,.10);--text:#f5f5f7;--kick:#53e000;--twitch:#9147ff;--tiktok:#25f4ee;--cng:#ff8a00;--youtube:#ff0000}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}
+body{font-family:Inter,Segoe UI,Arial,sans-serif;color:var(--text);padding:16px;display:flex;flex-direction:column;gap:6px}
+#chat{width:100%;flex:1 1 auto;min-height:0;display:flex;align-items:center;overflow:hidden;position:relative;white-space:nowrap}
+.message{display:inline-flex;align-items:center;flex:0 0 auto;white-space:nowrap;--platform:#fff}
+.message.twitch{--platform:#9147ff}
+.message.kick{--platform:#53e000}
+.message.cng{--platform:#ff8a00}
+.message.tiktok{--platform:#25f4ee}
+.message.youtube{--platform:#ff0000}
+.avatar{width:36px;height:36px;min-width:36px;border-radius:50%;object-fit:cover;background:#202127;border:2px solid var(--border)}
+.content{min-width:0;max-width:none;background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--platform);border-radius:8px;padding:5px 9px;white-space:nowrap}
+.head{display:flex;align-items:center;gap:7px;line-height:1.1;margin-bottom:3px}
+.platform{font-size:10px;font-weight:800;letter-spacing:.7px;color:var(--platform)}
+.name{font-size:13px;font-weight:750;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badges{display:flex;gap:3px;flex-wrap:wrap}
+.badge{font-size:9px;padding:2px 4px;border-radius:4px;background:rgba(255,255,255,.12);color:#ddd}
+.text{font-size:14px;line-height:1.2;white-space:nowrap;overflow:visible}
+.chat-emote{height:28px;width:auto;max-width:96px;vertical-align:middle;object-fit:contain;margin:0 1px}
+.twitch .chat-emote{height:28px}
+.kick .chat-emote{height:28px}
+.cng-emote{height:28px}
+.tiktok-emote{height:28px}
+@keyframes in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes out{from{opacity:1;transform:translateY(0);max-height:300px}
+                to{opacity:0;transform:translateY(-4px);max-height:0;margin-top:-8px}}
+@keyframes messageOut{
+  from{
+    opacity:1;
+    transform:translateY(0);
+    max-height:500px;
+  }
+  to{
+    opacity:0;
+    transform:translateY(-5px);
+    max-height:0;
+    margin-top:0;
+    padding-top:0;
+    padding-bottom:0;
+  }
+}
+
+.chat-row{
+  display:flex;
+  align-items:center;
+  gap:0;
+  white-space:nowrap;
+  min-width:max-content;
+  transform:translateX(0);
+}
+.chain-item{
+  display:inline-flex;
+  align-items:center;
+  flex:0 0 auto;
+  white-space:nowrap;
+}
+.chain-separator{
+  display:inline-block;
+  margin:0 12px;
+  color:rgba(255,255,255,.65);
+  font-size:14px;
+  font-weight:700;
+}
+.chain-user{
+  font-weight:800;
+  color:#fff;
+}
+.chain-text{
+  margin-left:4px;
+  color:#fff;
+}
+
+#chat::before{
+  content:"";
+  position:absolute;
+  left:0;
+  right:0;
+  top:50%;
+  height:46px;
+  transform:translateY(-50%);
+  background:rgba(0,0,0,.52);
+  border-top:1px solid rgba(255,255,255,.10);
+  border-bottom:1px solid rgba(255,255,255,.10);
+  box-shadow:0 2px 12px rgba(0,0,0,.25);
+  pointer-events:none;
+}
+#chatRow{
+  position:relative;
+  z-index:1;
+  padding:0 14px;
+  min-height:38px;
+  display:flex;
+  align-items:center;
+}
+
+/* ============================================================
+   CNG VIEWER PANEL
+   ============================================================ */
+#viewerPanel{
+  flex:0 0 auto;
+  width:100%;
+  overflow:hidden;
+  max-height:0;
+  opacity:0;
+  transform:translateY(-6px);
+  transition:max-height .28s ease,opacity .20s ease,transform .28s ease;
+}
+#viewerPanel.open{
+  max-height:240px;
+  opacity:1;
+  transform:translateY(0);
+}
+#viewerToggle{
+  width:100%;
+  height:28px;
+  display:flex;
+  align-items:center;
+  gap:7px;
+  padding:0 10px;
+  border:1px solid rgba(255,255,255,.10);
+  border-radius:7px;
+  background:rgba(8,9,13,.82);
+  color:#f5f5f7;
+  font:700 11px Inter,Segoe UI,Arial,sans-serif;
+  cursor:pointer;
+  text-align:left;
+  backdrop-filter:blur(5px);
+  box-shadow:0 2px 8px rgba(0,0,0,.25);
+}
+#viewerToggle:hover{background:rgba(20,22,28,.92)}
+#viewerToggle .viewer-count{color:var(--cng)}
+#viewerToggle .viewer-arrow{margin-left:auto;color:#aaa;font-size:10px}
+#viewerList{
+  margin-top:5px;
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  max-height:202px;
+  overflow-y:auto;
+  scrollbar-width:thin;
+}
+.viewer-item{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-height:40px;
+  padding:4px 8px;
+  border:1px solid rgba(255,255,255,.09);
+  border-left:3px solid var(--cng);
+  border-radius:7px;
+  background:rgba(8,9,13,.82);
+  backdrop-filter:blur(5px);
+}
+.viewer-avatar{
+  width:30px;
+  height:30px;
+  min-width:30px;
+  border-radius:50%;
+  object-fit:cover;
+  background:#202127;
+  border:1px solid rgba(255,255,255,.16);
+}
+.viewer-info{
+  min-width:0;
+  flex:1 1 auto;
+  overflow:hidden;
+}
+.viewer-name{
+  font-size:11px;
+  line-height:1.15;
+  font-weight:800;
+  color:#fff;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.viewer-type{
+  margin-top:2px;
+  font-size:8px;
+  line-height:1.1;
+  color:#ffb15c;
+  font-weight:700;
+}
+.viewer-extra{
+  min-width:70px;
+  min-height:12px;
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:3px;
+  color:#8b919a;
+  font-size:7px;
+}
+.viewer-empty{
+  padding:7px 10px;
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:7px;
+  background:rgba(8,9,13,.70);
+  color:#8b919a;
+  font-size:9px;
+}
+
+</style>
+</head>
+<body>
+
+<div id="viewerPanel">
+  <button id="viewerToggle" type="button" aria-expanded="false">
+    <span>👥</span>
+    <span>Zuschauer</span>
+    <span id="viewerCount" class="viewer-count">(0)</span>
+    <span id="viewerArrow" class="viewer-arrow">▼</span>
+  </button>
+  <div id="viewerList">
+    <div id="viewerEmpty" class="viewer-empty">Keine aktiven Zuschauer</div>
+  </div>
+</div>
+
+<div id="chat"></div>
+<script>
+const CONFIG={
+  maxMessages:14,
+  bridge:"http://127.0.0.1:8765/events",
+  autoHideMessages:true,
+  messageLifetimeSeconds:10
+};
+const chat=document.getElementById("chat");
+const DISPLAY_CONFIG={
+  autoHideMessages:true,
+  messageLifetimeSeconds:10
+};
+
+async function loadDisplayConfig(){
+  try{
+    const response=await fetch(
+      "http://127.0.0.1:8765/config",
+      {cache:"no-store"}
+    );
+
+    if(!response.ok){
+      throw new Error("HTTP "+response.status);
+    }
+
+    const data=await response.json();
+
+    DISPLAY_CONFIG.autoHideMessages=Boolean(
+      data.auto_hide_messages
+    );
+
+    const seconds=Number(
+      data.message_lifetime_seconds
+    );
+
+    if(Number.isFinite(seconds)){
+      DISPLAY_CONFIG.messageLifetimeSeconds=Math.max(
+        1,
+        Math.min(300,seconds)
+      );
+    }
+
+    console.log(
+      "[CNG MultiChat] Auto-Hide:",
+      DISPLAY_CONFIG.autoHideMessages,
+      "|",
+      DISPLAY_CONFIG.messageLifetimeSeconds+"s"
+    );
+  }catch(err){
+    console.warn(
+      "[CNG MultiChat] Anzeigeeinstellungen konnten nicht geladen werden:",
+      err
+    );
+  }
+}
+
+// Reload display settings periodically so changes to display_settings.json
+// can take effect without restarting the bridge or OBS browser source.
+setInterval(loadDisplayConfig, 5000);
+
+
+function esc(v){
+  return String(v??"").replace(/[&<>"']/g,c=>({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+  }[c]));
+}
+
+function safeUrl(v){
+  try{
+    const u=new URL(v);
+    return (u.protocol==="https:"||u.protocol==="http:") ? u.href : "";
+  }catch{return ""}
+}
+
+function plat(v){
+  v=String(v||"").toLowerCase();
+  return ["kick","twitch","tiktok","cng","youtube"].includes(v)?v:"system";
+}
+
+function pname(v){
+  return({kick:"KICK",twitch:"TWITCH",tiktok:"TIKTOK",cng:"CNG",youtube:"YOUTUBE",system:"CHAT"})[v]||"CHAT";
+}
+
+/* Kick sends native emotes in the form:
+   [emote:4147902:KEKBye]
+   Kick's emote CDN uses /emotes/{id}/fullsize. */
+function renderKick(text){
+  let out="";
+  let last=0;
+  const re=/\[emote:(\d+):([^\]]+)\]/g;
+  let m;
+
+  while((m=re.exec(String(text??"")))!==null){
+    out+=esc(String(text).slice(last,m.index));
+
+    const url="https://files.kick.com/emotes/"+m[1]+"/fullsize";
+    out+=`<img class="chat-emote" src="${url}" alt="${esc(m[2])}" title="${esc(m[2])}" onerror="this.replaceWith(document.createTextNode(${JSON.stringify(m[2])}))">`;
+
+    last=m.index+m[0].length;
+  }
+
+  out+=esc(String(text??"").slice(last));
+  return out;
+}
+
+/* Twitch IRC gives emote ranges like:
+   25:0-4/1902:6-10
+   Twitch ranges are UTF-16 indexes, so JS substring is exactly what we need. */
+function renderTwitch(text, raw){
+  const source=String(text??"");
+  const spec=String(raw??"");
+  if(!spec) return esc(source);
+
+  const ranges=[];
+
+  for(const group of spec.split("/")){
+    const parts=group.split(":");
+    if(parts.length<2) continue;
+
+    const id=parts[0];
+
+    for(const range of parts[1].split(",")){
+      const p=range.split("-");
+      if(p.length!==2) continue;
+
+      const start=Number(p[0]);
+      const end=Number(p[1]);
+
+      if(Number.isInteger(start)&&Number.isInteger(end)&&start>=0&&end>=start){
+        ranges.push({id,start,end});
+      }
+    }
+  }
+
+  ranges.sort((a,b)=>a.start-b.start);
+
+  let out="";
+  let pos=0;
+
+  for(const r of ranges){
+    if(r.start<pos) continue;
+
+    out+=esc(source.slice(pos,r.start));
+
+    const emoteText=source.slice(r.start,r.end+1);
+    const url=`https://static-cdn.jtvnw.net/emoticons/v2/${encodeURIComponent(r.id)}/default/dark/3.0`;
+
+    out+=`<img class="chat-emote" src="${url}" alt="${esc(emoteText)}" title="${esc(emoteText)}" onerror="this.replaceWith(document.createTextNode(${JSON.stringify(emoteText)}))">`;
+
+    pos=r.end+1;
+  }
+
+  out+=esc(source.slice(pos));
+  return out;
+}
+
+const CNG_EMOTES = {
+  ":happy:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-happy-dd9c2PYTAEzo843pAuC5HA.webp",
+  ":wink:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-wink-8EntH6XLqXhbdYNcwAcvA2.webp",
+  ":sad:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-sad-buqEk7HWyP8qkVFndko5m4.webp",
+  ":evil:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-evil-SPeQQjGqPXviqfyAkLD5mB.webp",
+  ":angry:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-angry-QWLYj2xAEFtuzPVF6vRQye.webp",
+  ":love:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-love-VxomXxRhM386U9AaBLtQVy.webp",
+  ":hype:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-hype-FPWCK2kLHz6pSMbQvKod2R.webp",
+  ":shocked:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-shocked-CUk8EEBja4nsPx3SYxYvmG.webp",
+  ":cool:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-cool-Vjoar8GadCW8M4LeoMwHvm.webp",
+  ":thinking:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-thinking-UeQC2VRu22SajWSj2NfgT9.webp",
+  ":nervous:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-nervous-Hv84Nm5cGddpC8askYnQiS.webp",
+  ":blush:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-blush-YVgbviX29mL7sk5eabZ9u9.webp",
+  ":dizzy:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-dizzy-nuAg4ctMRnw5VDLuhWo2C6.webp",
+  ":sick:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-sick-FNjHdUu3mxMfSiHYwfZmWH.webp"
+};
+
+function renderCng(text, emotes){
+  const source=String(text??"");
+  const list=Array.isArray(emotes)?emotes:[];
+
+  // Preferred: the bridge already resolved the CNG token to its real image URL.
+  const ranges=list.map(e=>({
+    url:safeUrl(e?.url||e?.image_url||e?.imageUrl||e?.src||""),
+    start:Number(e?.start),
+    end:Number(e?.end),
+    token:String(e?.token||""),
+    name:String(e?.name||e?.token||"")
+  })).filter(e=>e.url).sort((a,b)=>a.start-b.start);
+
+  if(ranges.length){
+    let out="";
+    let pos=0;
+    let used=false;
+
+    for(const e of ranges){
+      if(!Number.isInteger(e.start)||!Number.isInteger(e.end)
+         ||e.start<pos||e.start<0||e.end<e.start||e.end>=source.length) continue;
+
+      const token=source.slice(e.start,e.end+1);
+      out+=esc(source.slice(pos,e.start));
+      out+=`<img class="chat-emote cng-emote" src="${esc(e.url)}" alt="${esc(e.name||token)}" title="${esc(e.name||token)}" onerror="this.replaceWith(document.createTextNode(${JSON.stringify(token)}))">`;
+      pos=e.end+1;
+      used=true;
+    }
+
+    if(used) return out+esc(source.slice(pos));
+  }
+
+  // Fallback: use bridge tokens when positions are unavailable.
+  if(list.length){
+    let out="";
+    let pos=0;
+    for(const e of list){
+      const url=safeUrl(e?.url||e?.image_url||e?.imageUrl||e?.src||"");
+      const token=String(e?.token||"");
+      if(!url||!token) continue;
+      const idx=source.indexOf(token,pos);
+      if(idx<0) continue;
+      out+=esc(source.slice(pos,idx));
+      out+=`<img class="chat-emote cng-emote" src="${esc(url)}" alt="${esc(e?.name||token)}" title="${esc(e?.name||token)}" onerror="this.replaceWith(document.createTextNode(${JSON.stringify(token)}))">`;
+      pos=idx+token.length;
+    }
+    return out+esc(source.slice(pos));
+  }
+
+  // Final fallback: original built-in CNG emote map.
+  let out="";
+  const re=/:([a-zA-Z0-9_]+):/g;
+  let last=0;
+  let m;
+  while((m=re.exec(source))!==null){
+    const token=m[0];
+    const url=CNG_EMOTES[token.toLowerCase()];
+    if(!url) continue;
+    out+=esc(source.slice(last,m.index));
+    out+=`<img class="chat-emote cng-emote" src="${url}" alt="${esc(m[1])}" title="${esc(m[1])}" onerror="this.replaceWith(document.createTextNode(${JSON.stringify(token)}))">`;
+    last=m.index+token.length;
+  }
+  return out+esc(source.slice(last));
+}
+
+function ttUrlFromObject(x){
+  if(!x) return "";
+  if(typeof x==="string"){
+    return /^https?:\/\//i.test(x) &&
+      /(tiktokcdn|ibytedtos|muscdn|byteimg|p16-|p19-|p77-|p9-)/i.test(x)
+      ? x : "";
+  }
+  if(Array.isArray(x)){
+    for(const v of x){
+      const u=ttUrlFromObject(v);
+      if(u) return u;
+    }
+    return "";
+  }
+  if(typeof x==="object"){
+    for(const k of ["url","image_url","imageUrl","uri","src"]){
+      if(x[k]){
+        const u=ttUrlFromObject(x[k]);
+        if(u) return u;
+      }
+    }
+    for(const k of Object.keys(x)){
+      const u=ttUrlFromObject(x[k]);
+      if(u) return u;
+    }
+  }
+  return "";
+}
+
+function renderTikTok(text, emotes){
+  const source=String(text??"");
+  const list=Array.isArray(emotes)?emotes:[];
+  if(!list.length) return esc(source);
+
+  const ranges=list
+    .map(e=>({
+      url:safeUrl(e?.url||e?.image_url||e?.imageUrl||e?.src||""),
+      start:Number(e?.start),
+      end:Number(e?.end),
+      token:String(e?.token||""),
+      name:String(e?.name||e?.emoteId||e?.token||"")
+    }))
+    .filter(e=>e.url && Number.isInteger(e.start) && Number.isInteger(e.end))
+    .sort((a,b)=>a.start-b.start);
+
+  if(ranges.length){
+    let out="";
+    let pos=0;
+    for(const r of ranges){
+      if(r.start<pos || r.start<0 || r.end<r.start || r.end>=source.length) continue;
+      out+=esc(source.slice(pos,r.start));
+      const token=source.slice(r.start,r.end+1);
+      out+=`<img class="chat-emote tiktok-emote" src="${esc(r.url)}" alt="${esc(r.name||token)}" title="${esc(r.name||token)}" onerror="this.replaceWith(document.createTextNode(${JSON.stringify(token)}))">`;
+      pos=r.end+1;
+    }
+    out+=esc(source.slice(pos));
+    return out;
+  }
+
+  // Token fallback: newer TikTokLive builds can expose the emote URL while
+  // the character index is not usable as a JavaScript string offset.
+  let out="";
+  let pos=0;
+  for(const r of list){
+    const url=safeUrl(r?.url||r?.image_url||r?.imageUrl||r?.src||"");
+    const token=String(r?.token||"");
+    if(!url || !token) continue;
+    const idx=source.indexOf(token,pos);
+    if(idx<0) continue;
+    out+=esc(source.slice(pos,idx));
+    out+=`<img class="chat-emote tiktok-emote" src="${esc(url)}" alt="${esc(r?.name||token)}" title="${esc(r?.name||token)}" onerror="this.replaceWith(document.createTextNode(${JSON.stringify(token)}))">`;
+    pos=idx+token.length;
+  }
+  out+=esc(source.slice(pos));
+  return out;
+}
+
+
+/* ============================================================
+   CNG VIEWERS
+   ============================================================ */
+const viewerPanel=document.getElementById("viewerPanel");
+const viewerToggle=document.getElementById("viewerToggle");
+const viewerArrow=document.getElementById("viewerArrow");
+const viewerCount=document.getElementById("viewerCount");
+const viewerList=document.getElementById("viewerList");
+
+let viewersOpen=false;
+
+function viewerType(v){
+  const raw=String(v?.type||v?.viewerType||v?.kind||v?.role||"").toLowerCase();
+  if(v?.isCreator===true || raw==="creator" || raw==="streamer") return "Creator";
+  return "Watcher";
+}
+
+function viewerDisplayName(v){
+  const username=String(v?.username||v?.userName||v?.name||"").trim();
+  const display=String(v?.displayName||v?.display_name||"").trim();
+  if(username && display && username.toLowerCase()!==display.toLowerCase())
+    return `${username} - ${display}`;
+  return username || display || "Unbekannt";
+}
+
+function renderViewers(list){
+  const viewers=Array.isArray(list)?list:[];
+  viewerCount.textContent=`(${viewers.length})`;
+  viewerList.replaceChildren();
+
+  if(!viewers.length){
+    const empty=document.createElement("div");
+    empty.className="viewer-empty";
+    empty.textContent="Keine aktiven Zuschauer";
+    viewerList.appendChild(empty);
+    return;
+  }
+
+  for(const v of viewers){
+    const item=document.createElement("div");
+    item.className="viewer-item";
+
+    const avatar=safeUrl(v?.avatar||v?.avatarUrl||v?.profileImage||"");
+    const avatarHtml=avatar
+      ? `<img class="viewer-avatar" src="${esc(avatar)}" alt="" onerror="this.style.visibility='hidden'">`
+      : `<div class="viewer-avatar"></div>`;
+
+    item.innerHTML=`
+      ${avatarHtml}
+      <div class="viewer-info">
+        <div class="viewer-name">${esc(viewerDisplayName(v))}</div>
+        <div class="viewer-type">${esc(viewerType(v))}</div>
+      </div>
+      <div class="viewer-extra" aria-label="Weitere Informationen"></div>
+    `;
+
+    viewerList.appendChild(item);
+  }
+}
+
+function setViewersOpen(open){
+  viewersOpen=Boolean(open);
+  viewerPanel.classList.toggle("open",viewersOpen);
+  viewerToggle.setAttribute("aria-expanded",String(viewersOpen));
+  viewerArrow.textContent=viewersOpen?"▲":"▼";
+}
+
+viewerToggle.addEventListener("click",()=>setViewersOpen(!viewersOpen));
+
+function renderMessage(d){
+  const p=plat(d.platform);
+
+  if(p==="twitch")
+    return renderTwitch(d.message,d.twitchEmotes);
+
+  if(p==="kick")
+    return renderKick(d.message);
+
+  if(p==="cng")
+    return renderCng(d.message,d.cngEmotes||d.cng_emotes||d.emotes||[]);
+
+  if(p==="tiktok")
+    return renderTikTok(d.message,d.tiktokEmotes);
+
+  return esc(d.message||"");
+}
+
+const messageQueue=[];
+let addingMessage=false;
+const MAX_CHAIN_MESSAGES=30;
+
+function addMessage(d){
+  messageQueue.push(d);
+  processMessageQueue();
+}
+
+function processMessageQueue(){
+  if(addingMessage || !messageQueue.length) return;
+
+  addingMessage=true;
+  const d=messageQueue.shift();
+  const p=plat(d.platform);
+
+  let row=document.getElementById("chatRow");
+  if(!row){
+    row=document.createElement("div");
+    row.id="chatRow";
+    row.className="chat-row";
+    chat.appendChild(row);
+  }
+
+  const item=document.createElement("span");
+  item.className="chain-item";
+  item.dataset.platform=p;
+
+  const platformName=pname(p);
+  const username=esc(d.username||"Unbekannt");
+  const message=renderMessage(d);
+
+  item.innerHTML=`
+    <span class="platform" style="color:var(--platform-color)">${platformName}</span>
+    <span class="chain-user">${username}:</span>
+    <span class="chain-text">${message}</span>`;
+
+  // Platformfarbe direkt am Item setzen.
+  const platformColors={
+    kick:"#53e000",
+    twitch:"#9147ff",
+    tiktok:"#25f4ee",
+    cng:"#ff8a00",
+    youtube:"#ff0000",
+    system:"#ffffff"
+  };
+  item.style.setProperty("--platform-color",platformColors[p]||"#ffffff");
+
+  const oldItems=row.querySelectorAll(".chain-item");
+  if(oldItems.length){
+    const sep=document.createElement("span");
+    sep.className="chain-separator";
+    sep.textContent="-";
+    row.appendChild(sep);
+  }
+
+  row.appendChild(item);
+
+  // Neue Nachricht kommt rechts herein.
+  item.style.opacity="0";
+  item.style.transform="translateX(40px)";
+  item.style.transition="opacity .25s ease, transform .25s ease";
+
+  requestAnimationFrame(()=>{
+    item.style.opacity="1";
+    item.style.transform="translateX(0)";
+  });
+
+  // Nach dem Einfügen die ältesten Nachrichten entfernen,
+  // wenn die Kette zu breit wird.
+  requestAnimationFrame(()=>{
+    while(row.querySelectorAll(".chain-item").length>MAX_CHAIN_MESSAGES){
+      const first=row.querySelector(".chain-item");
+      if(!first) break;
+
+      const previous=first.previousElementSibling;
+      if(previous && previous.classList.contains("chain-separator"))
+        previous.remove();
+
+      first.remove();
+    }
+
+    // Die gesamte Kette so verschieben, dass ihr rechtes Ende
+    // am rechten Rand bleibt. Dadurch rücken alle vorhandenen
+    // Nachrichten nach links, sobald eine neue Nachricht kommt.
+    const overflow=row.scrollWidth-chat.clientWidth;
+    row.style.transition="transform .35s ease-out";
+    row.style.transform=overflow>0
+      ? `translateX(-${overflow}px)`
+      : "translateX(0)";
+
+    addingMessage=false;
+    processMessageQueue();
+  });
+}
+
+window.UnifiedChat={
+  add:addMessage,
+  clear:()=>{messageQueue.length=0;chat.replaceChildren();addingMessage=false}
+};
+
+loadDisplayConfig().finally(()=>{
+  const es=new EventSource(CONFIG.bridge);
+
+  es.onopen=()=>console.log("[Unified] Bridge verbunden");
+
+  es.onmessage=e=>{
+    try{
+      const data=JSON.parse(e.data);
+
+      if(data && data.type==="cng_viewers"){
+        renderViewers(data.viewers||[]);
+        return;
+      }
+
+      addMessage(data);
+    }catch(err){
+      console.error("[Unified] JSON-Fehler",err);
+    }
+  };
+
+  es.onerror=()=>console.warn(
+    "[Unified] Bridge getrennt - automatischer Reconnect"
+  );
+});
+</script>
+</body>
+</html>

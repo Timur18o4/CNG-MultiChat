@@ -1,0 +1,18 @@
+# Local account and runtime data - never publish
+accounts.json
+unified_chat_config.json
+manager_settings.json
+display_settings.json
+alert_settings.json
+obs_settings.json
+command_bot.json
+*.log
+
+# Python and build output
+__pycache__/
+*.py[cod]
+.buildenv/
+build/
+release/
+dist/
+*.spec
