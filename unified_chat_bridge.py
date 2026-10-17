@@ -40,9 +40,11 @@ Twitch:
   Twitch IRC requires a User Access Token with chat:read.
 """
 
+import asyncio
 import json
 import time
 import base64
+import builtins as _builtins
 import ctypes
 import hashlib
 import mimetypes
@@ -63,6 +65,16 @@ try:
     import websocket
 except ImportError:
     websocket = None
+
+# Bridge workers log from several threads. Serialize complete print calls so
+# unrelated platform messages cannot be spliced into a Kick error line.
+_PRINT_LOCK = threading.RLock()
+_BUILTIN_PRINT = _builtins.print
+
+
+def print(*args, **kwargs):
+    with _PRINT_LOCK:
+        return _BUILTIN_PRINT(*args, **kwargs)
 
 BASE_DIR = Path(
     sys.executable if getattr(sys, "frozen", False) else __file__
@@ -916,7 +928,48 @@ def cng_normalize(m, creator_id):
 
 LUMIA_TOKEN = ""
 LUMIA_API_URL = f"http://localhost:39231/api/send?token={LUMIA_TOKEN}"
-LUMIA_WS_URL = "ws://127.0.0.1:39231/api"
+
+
+def load_lumiastream_settings(config=None):
+    """Load Lumia settings from the Manager-owned command_bot.json file."""
+    merged = {}
+    fallback = (config or {}).get("lumiastream")
+    if isinstance(fallback, dict):
+        merged.update(fallback)
+
+    try:
+        saved = command_bot_config().get("lumiastream")
+    except Exception:
+        saved = None
+
+    if isinstance(saved, dict):
+        for key, value in saved.items():
+            if value not in (None, ""):
+                merged[key] = value
+    return merged
+
+
+def lumiastream_websocket_url(settings):
+    """Derive Lumia's WebSocket endpoint from the configured REST API URL."""
+    api_url = str(
+        (settings or {}).get("api_url")
+        or "http://localhost:39231/api/send"
+    ).strip()
+    parsed = urlparse(api_url)
+    scheme = {"http": "ws", "https": "wss", "ws": "ws", "wss": "wss"}.get(
+        parsed.scheme.lower()
+    )
+    if not scheme or not parsed.netloc:
+        raise ValueError("Lumia API URL muss eine gültige HTTP(S)-Adresse sein.")
+
+    path = parsed.path.rstrip("/")
+    if path.endswith("/send"):
+        path = path[:-len("/send")]
+    if not path:
+        path = "/api"
+
+    token = str((settings or {}).get("token") or LUMIA_TOKEN).strip()
+    return f"{scheme}://{parsed.netloc}{path}?token={quote(token, safe='')}"
 
 
 def _find_lumia_variable(value, wanted_name="cng_bot_response"):
@@ -964,14 +1017,15 @@ class LumiaWebSocketClient:
         self.connected_event = threading.Event()
 
     def _settings(self):
-        return (self.config or {}).get("lumiastream") or {}
+        return load_lumiastream_settings(self.config)
 
     def _token(self):
         return str(self._settings().get("token") or LUMIA_TOKEN).strip()
 
     def _url(self):
-        token = self._token()
-        return f"{LUMIA_WS_URL}?token={quote(token, safe='')}"
+        settings = self._settings()
+        settings["token"] = self._token()
+        return lumiastream_websocket_url(settings)
 
     def _complete_pending(self, context, response):
         with self.pending_lock:
@@ -1056,6 +1110,19 @@ class LumiaWebSocketClient:
                     daemon=True,
                 )
                 self.receiver_thread.start()
+
+    def connect_forever(self):
+        """Keep the Lumia socket alive and retry failed handshakes."""
+        while not self.stop_event.is_set():
+            try:
+                self.ensure_connected()
+            except Exception as exc:
+                print("[LUMIA WS] Verbindung/Fehler:", repr(exc))
+                self.stop_event.wait(5)
+                continue
+
+            while self.connected_event.is_set() and not self.stop_event.is_set():
+                self.stop_event.wait(1)
 
     def request(self, command_type, params, timeout=10):
         self.ensure_connected()
@@ -1905,7 +1972,7 @@ def send_cng_command_to_lumia(message, username, config=None):
             "message": optional_message
         }
 
-    lumiastream = (config or {}).get("lumiastream") or {}
+    lumiastream = load_lumiastream_settings(config)
     api_url = str(
         lumiastream.get("api_url") or
         "http://localhost:39231/api/send"
@@ -1927,6 +1994,18 @@ def send_cng_command_to_lumia(message, username, config=None):
             },
             timeout=10
         )
+
+        if not response.ok:
+            response_body = str(response.text or "").strip()
+            if token:
+                response_body = response_body.replace(token, "<redacted>")
+            response_body = response_body[:1000]
+            print(
+                f"[LUMIA] CNG Command abgelehnt: !{command}"
+                f" | HTTP {response.status_code}"
+                f" | Antwort: {response_body!r}"
+            )
+            return
 
         print(
             f"[LUMIA] CNG Command gesendet: !{command}"
@@ -4146,6 +4225,12 @@ def twitch_eventsub_user_id(config, channel):
     return None
 
 
+def twitch_is_reconnect_command(line):
+    """Return True for Twitch IRC's documented server RECONNECT command."""
+    parts = str(line or "").strip().split()
+    return len(parts) >= 2 and parts[-2:] == [":tmi.twitch.tv", "RECONNECT"]
+
+
 def twitch_eventsub_emit(event_type, event_data, config):
     """Normalize one Twitch EventSub notification into the bridge schema."""
     username = str(
@@ -4796,6 +4881,8 @@ def twitch_loop(config):
 
             buffer = ""
 
+            reconnect_requested = False
+
             while True:
                 try:
                     data = ws.recv()
@@ -4813,6 +4900,17 @@ def twitch_loop(config):
 
                     if not line:
                         continue
+
+                    # Twitch may ask IRC clients to reconnect for server
+                    # maintenance. Leave this socket immediately; the outer
+                    # loop reconnects and rejoins the configured channel.
+                    if twitch_is_reconnect_command(line):
+                        print(
+                            "[TWITCH] Server fordert eine neue Verbindung an. "
+                            "Verbinde erneut ..."
+                        )
+                        reconnect_requested = True
+                        break
 
                     # Twitch IRC keepalive.
                     if line.startswith("PING"):
@@ -4850,6 +4948,9 @@ def twitch_loop(config):
                             )
 
                         publish(msg)
+
+                if reconnect_requested:
+                    break
 
         except Exception as e:
             print(
@@ -5025,7 +5126,8 @@ def _kick_centrifugo_lines(raw):
 
 
 def _kick_centrifugo_wait_ack(
-    ws, command_id, command_name, timeout=10, pong_required=False
+    ws, command_id, command_name, timeout=10, pong_required=False,
+    activity_callback=None,
 ):
     """Wait for a Centrifugo command reply while retaining intervening pushes."""
     deadline = time.monotonic() + timeout
@@ -5037,6 +5139,8 @@ def _kick_centrifugo_wait_ack(
             continue
         if raw is None:
             raise RuntimeError("Kick Centrifugo-WebSocket wurde beendet")
+        if activity_callback is not None:
+            activity_callback()
         lines = _kick_centrifugo_lines(raw)
         if not lines:
             if pong_required:
@@ -5625,6 +5729,10 @@ def kick_loop(config):
             )
             last_received = time.monotonic()
 
+            def mark_kick_activity():
+                nonlocal last_received
+                last_received = time.monotonic()
+
             while True:
                 if time.monotonic() >= refresh_at:
                     token = kick_connection_token(client_id)
@@ -5634,7 +5742,11 @@ def kick_loop(config):
                         "refresh": {"token": token},
                     }))
                     refresh_reply, refresh_frames = _kick_centrifugo_wait_ack(
-                        ws, command_id, "refresh", pong_required=pong_required
+                        ws,
+                        command_id,
+                        "refresh",
+                        pong_required=pong_required,
+                        activity_callback=mark_kick_activity,
                     )
                     refresh_at = _kick_centrifugo_refresh_at(refresh_reply)
                     pending_frames.extend(refresh_frames)
@@ -5716,6 +5828,85 @@ def kick_loop(config):
 # ============================================================
 # TIKTOK LIVE
 # ============================================================
+
+TIKTOK_WS_IDLE_TIMEOUT_SECONDS = 120.0
+TIKTOK_WS_WATCH_INTERVAL_SECONDS = 15.0
+
+
+def _tiktok_install_ws_activity_monitor(client, on_activity):
+    """Track raw TikTok WebSocket frames, including non-chat heartbeat frames.
+
+    TikTokLive 7.x hides transport frames from its public event API. Its
+    WebcastConnect iterator can be wrapped locally so the watchdog can tell a
+    quiet chat from a socket that stopped receiving anything.
+    """
+    ws_client = getattr(client, "_ws", None)
+    base_connect_class = getattr(ws_client, "_connect_generator_class", None)
+    if ws_client is None or not isinstance(base_connect_class, type):
+        return False
+
+    class ActivityMonitoredConnect(base_connect_class):
+        async def __aiter__(self):
+            hook_installed = False
+            async for item in super().__aiter__():
+                if not hook_installed:
+                    protocol = getattr(self, "ws", None)
+                    original_recv = getattr(protocol, "recv", None)
+                    if protocol is not None and callable(original_recv):
+                        async def monitored_recv(*args, **kwargs):
+                            payload = await original_recv(*args, **kwargs)
+                            on_activity()
+                            return payload
+
+                        try:
+                            protocol.recv = monitored_recv
+                            hook_installed = True
+                        except (AttributeError, TypeError):
+                            pass
+                yield item
+
+    ws_client._connect_generator_class = ActivityMonitoredConnect
+    return True
+
+
+def _tiktok_start_ws_watchdog(client, activity_state):
+    """Close a TikTok socket that stays open but stops delivering all frames."""
+    async def watchdog():
+        while True:
+            await asyncio.sleep(TIKTOK_WS_WATCH_INTERVAL_SECONDS)
+            if not getattr(client, "connected", False):
+                return
+
+            idle_seconds = time.monotonic() - activity_state["last_received"]
+            if idle_seconds < TIKTOK_WS_IDLE_TIMEOUT_SECONDS:
+                continue
+
+            print(
+                f"[TIKTOK] Seit {idle_seconds:.0f}s keine eingehenden "
+                "WebSocket-Frames; Verbindung wird neu aufgebaut."
+            )
+            try:
+                await client.disconnect()
+            except Exception as e:
+                print("[TIKTOK] Fehler beim automatischen Reconnect:", repr(e))
+            return
+
+    return asyncio.create_task(watchdog())
+
+
+def _tiktok_cancel_ws_watchdog(client, activity_state):
+    """Cancel the per-connection watchdog after TikTokLive.run() returns."""
+    task = activity_state.get("watchdog_task")
+    if task is None or task.done():
+        return
+
+    task.cancel()
+    loop = getattr(client, "_owned_asyncio_loop", None)
+    if loop is not None and not loop.is_running() and not loop.is_closed():
+        try:
+            loop.run_until_complete(asyncio.gather(task, return_exceptions=True))
+        except Exception as e:
+            print("[TIKTOK] Watchdog konnte nicht sauber beendet werden:", repr(e))
 
 def tiktok_avatar(user):
     try:
@@ -6112,9 +6303,28 @@ def tiktok_loop(config):
             client=TikTokLiveClient(
                 unique_id=unique_id
             )
+            tiktok_activity = {
+                "last_received": time.monotonic(),
+                "watchdog_started": False,
+                "watchdog_task": None,
+            }
+            if not _tiktok_install_ws_activity_monitor(
+                client,
+                lambda: tiktok_activity.__setitem__("last_received", time.monotonic()),
+            ):
+                print(
+                    "[TIKTOK] WebSocket-Überwachung nicht verfügbar; "
+                    "verwende Ereignisüberwachung als Rückfall."
+                )
 
             @client.on(ConnectEvent)
             async def _on_connect(event):
+                tiktok_activity["last_received"] = time.monotonic()
+                if not tiktok_activity["watchdog_started"]:
+                    tiktok_activity["watchdog_task"] = _tiktok_start_ws_watchdog(
+                        client, tiktok_activity
+                    )
+                    tiktok_activity["watchdog_started"] = True
                 try:
                     viewer_count = int(getattr(client, "viewer_count", 0) or 0)
                     room_info = _tt_public_dict(getattr(client, "room_info", None)) or {}
@@ -6457,6 +6667,7 @@ def tiktok_loop(config):
 
             @client.on(WebsocketResponseEvent)
             async def _on_websocket_response(event):
+                tiktok_activity["last_received"] = time.monotonic()
                 try:
                     viewer_count = int(getattr(client, "viewer_count", 0) or 0)
                     update_social_status("tiktok", viewers=viewer_count, available=True)
@@ -6479,7 +6690,10 @@ def tiktok_loop(config):
                     "[TIKTOK] Verbindung getrennt."
                 )
 
-            client.run()
+            try:
+                client.run()
+            finally:
+                _tiktok_cancel_ws_watchdog(client, tiktok_activity)
 
         except Exception as e:
             print(
@@ -7686,7 +7900,7 @@ def main():
 
     if selected_bot == "lumiastream":
         threading.Thread(
-            target=get_lumia_ws_client(config).ensure_connected,
+            target=get_lumia_ws_client(config).connect_forever,
             daemon=True
         ).start()
     else:

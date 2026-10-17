@@ -1,5 +1,23 @@
 # Änderungen
 
+## v1.0.2 — 17.10.2026
+
+### Lumia Stream
+
+- Die Bridge liest Lumia-Token und API-Adresse aus der vom Manager gespeicherten `command_bot.json`.
+- Die WebSocket-Adresse wird aus der konfigurierten REST-Adresse abgeleitet. Ein fehlgeschlagener Verbindungsaufbau wird protokolliert und erneut versucht.
+- Abgewiesene REST-Befehle protokollieren die API-Antwort; Tokenwerte werden maskiert. Nach einem HTTP-Fehler wird keine veraltete CNG-Antwortvariable verarbeitet.
+
+### Plattformverbindungen
+
+- Twitch-IRC-`RECONNECT` löst einen unmittelbaren Neuaufbau der Verbindung aus; der konfigurierte Kanal wird danach erneut verbunden.
+- TikTok überwacht eingehende WebSocket-Frames einschließlich Heartbeats. Bei zwei Minuten ohne Frames wird die hängende Verbindung geschlossen und automatisch neu aufgebaut.
+- Kick erfasst Heartbeats auch während einer Token-Erneuerung. Thread-sichere Logausgabe verhindert, dass parallele Plattformmeldungen eine Kick-Fehlerzeile vermischen.
+
+### Alert-Einstellungen
+
+- Ältere Alert-Einstellungen werden beim Start in die aktuelle Konfiguration übernommen, ohne bewusst gespeicherte leere GIF- oder Soundfelder zu überschreiben.
+
 ## v1.0.1 — 17.10.2026
 
 - CNG-Farbwelt für Livechat und Mehrplattform-Statistik

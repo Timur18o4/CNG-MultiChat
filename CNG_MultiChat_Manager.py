@@ -785,6 +785,7 @@ class Manager(tk.Tk):
 
     def load_alert_settings(self):
         settings = json.loads(json.dumps(ALERT_EVENT_DEFAULTS))
+        stored_fields = {}
         try:
             if os.path.exists(ALERT_CONFIG_FILE):
                 with open(ALERT_CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -793,6 +794,32 @@ class Manager(tk.Tk):
                     for event_name, defaults in ALERT_EVENT_DEFAULTS.items():
                         if isinstance(stored.get(event_name), dict):
                             settings[event_name].update(stored[event_name])
+                            stored_fields[event_name] = set(stored[event_name])
+        except Exception:
+            pass
+
+        # Before alert_settings.json existed, the manager stored these values
+        # inside unified_chat_config.json. Import fields that are still absent
+        # from the new file so an upgrade does not silently lose custom media.
+        # Explicitly saved empty values remain empty, allowing users to clear a
+        # GIF or sound intentionally.
+        migrated = False
+        try:
+            bridge_config_path = os.path.join(BASE_DIR, BRIDGE_CONFIG_NAME)
+            with open(bridge_config_path, "r", encoding="utf-8") as f:
+                bridge_config = json.load(f)
+            legacy_alerts = bridge_config.get("alerts", {}) if isinstance(bridge_config, dict) else {}
+            if isinstance(legacy_alerts, dict):
+                for event_name in ALERT_EVENT_DEFAULTS:
+                    legacy = legacy_alerts.get(event_name, {})
+                    if not isinstance(legacy, dict):
+                        continue
+                    saved_fields = stored_fields.get(event_name, set())
+                    for field_name in ("label", "gif", "sound", "duration_seconds"):
+                        value = legacy.get(field_name)
+                        if field_name not in saved_fields and value not in (None, ""):
+                            settings[event_name][field_name] = value
+                            migrated = True
         except Exception:
             pass
 
@@ -804,6 +831,16 @@ class Manager(tk.Tk):
             settings[event_name]["duration_seconds"] = max(1, min(300, seconds))
             settings[event_name]["gif"] = str(settings[event_name].get("gif", "") or "")
             settings[event_name]["sound"] = str(settings[event_name].get("sound", "") or "")
+
+        if migrated:
+            try:
+                tmp = ALERT_CONFIG_FILE + ".tmp"
+                with open(tmp, "w", encoding="utf-8") as f:
+                    json.dump(settings, f, indent=2, ensure_ascii=False)
+                    f.write("\n")
+                os.replace(tmp, ALERT_CONFIG_FILE)
+            except OSError:
+                pass
 
         return settings
 
