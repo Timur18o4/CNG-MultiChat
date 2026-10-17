@@ -4,9 +4,9 @@ CNG MultiChat ist ein Windows-Programm, das mehrere Plattform-Chats über einen 
 
 ## Downloads
 
-Das fertige Windows-Paket wird auf der GitLab-Projektseite unter **Releases** bereitgestellt. Das ZIP vollständig entpacken und `CNG_MultiChat_Manager.exe` starten. Python wird auf dem Ziel-PC nicht benötigt. Die HTML-Dateien und die PDF-Anleitung gehören zum Paket.
+Das fertige Windows-Paket wird auf der [GitHub-Projektseite unter **Releases**](https://github.com/Timur18o4/CNG-MultiChat/releases) bereitgestellt. Das ZIP vollständig entpacken und `CNG_MultiChat_Manager.exe` starten. Python wird auf dem Ziel-PC nicht benötigt. Die HTML-Dateien und die PDF-Anleitung gehören zum Paket.
 
-Der Quellcode liegt im GitLab-Repository. Das fertige Windows-Paket wird zusätzlich als Release-Datei bereitgestellt.
+Der Quellcode liegt im [GitHub-Repository](https://github.com/Timur18o4/CNG-MultiChat). Das fertige Windows-Paket wird zusätzlich als Release-Datei bereitgestellt.
 
 ## Aus dem Quellcode bauen
 
