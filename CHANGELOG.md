@@ -1,6 +1,6 @@
 # Änderungen
 
-## 17.10.2026
+## v1.0.1 — 17.10.2026
 
 - CNG-Farbwelt für Livechat und Mehrplattform-Statistik
 - Statistik zusätzlich unter /stats erreichbar; /cng-status bleibt als Alias verfügbar
@@ -10,5 +10,7 @@
 - Neue Seite „Über / Kanäle“ mit direkten Links zu den Profilen von Timur18o4
 - Farbwelt und Navigation des Managers an den aktuellen CNG-Webauftritt angepasst
 - Beim Beenden im Tray wird die Bridge zuverlässig mit beendet, auch während eines laufenden Startvorgangs
+- Follow-/Unfollow-GIFs und -Sounds werden über die lokale Bridge an das Alert-Overlay ausgeliefert
+- Alert-Overlay liest die vom Manager gespeicherten Medienpfade aus `alert_settings.json`; Änderungen gelten auch bei bereits laufender Bridge
 - Aktualisierte deutsche Installations- und Benutzeranleitung
 - Community-Standardwerte ohne lokale Medienpfade oder vorausgefüllte externe Zugangsdaten

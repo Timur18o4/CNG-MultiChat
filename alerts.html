@@ -127,18 +127,17 @@ function escapeHtml(value) {
         .replace(/'/g, "&#039;");
 }
 
-function mediaUrl(value) {
-    let v = String(value || "").trim();
+function mediaUrl(value, alertType, kind) {
+    const v = String(value || "").trim();
     if (!v) return "";
-    if (/^(https?:|file:|data:|blob:)/i.test(v)) return v;
+    if (/^(https?:|data:|blob:)/i.test(v)) return v;
 
-    // Windows path -> file:/// URL. encodeURI keeps / and : but escapes
-    // spaces and non-ASCII characters correctly for Chromium/OBS.
-    if (/^[A-Za-z]:[\\/]/.test(v)) {
-        v = v.replace(/\\/g, "/");
-        return "file:///" + encodeURI(v);
-    }
-    return encodeURI(v);
+    // Local media is served by the bridge. Chromium/OBS often blocks direct
+    // file:// access when the overlay itself is loaded over HTTP.
+    const url = new URL(`${BRIDGE_BASE_URL}/alert-media`);
+    url.searchParams.set("type", alertType);
+    url.searchParams.set("kind", kind);
+    return url.toString();
 }
 
 function enqueueAlert(event) {
@@ -150,8 +149,8 @@ function enqueueAlert(event) {
         username: String(event.username || "Unbekannt"),
         message: String(event.message || ""),
         label: String(event.label || fallback.label || type),
-        gif: mediaUrl(event.gif || fallback.gif),
-        sound: mediaUrl(event.sound || fallback.sound),
+        gif: mediaUrl(event.gif || fallback.gif, type, "gif"),
+        sound: mediaUrl(event.sound || fallback.sound, type, "sound"),
         duration: Math.max(1, Math.min(300, Number(event.duration_seconds || fallback.duration_seconds || 5)))
     });
     showNext();

@@ -45,6 +45,7 @@ import time
 import base64
 import ctypes
 import hashlib
+import mimetypes
 import re
 import threading
 import ssl
@@ -69,6 +70,7 @@ BASE_DIR = Path(
 CONFIG_FILE = str(BASE_DIR / "unified_chat_config.json")
 DISPLAY_CONFIG_FILE = str(BASE_DIR / "display_settings.json")
 COMMAND_BOT_CONFIG_FILE = str(BASE_DIR / "command_bot.json")
+ALERT_CONFIG_FILE = BASE_DIR / "alert_settings.json"
 CNG_LOG_DIR = BASE_DIR / "logs"
 CNG_LOG_FILE = CNG_LOG_DIR / "cng_chat.log"
 CNG_BASE_URL = "https://cng-plattform.com"
@@ -667,15 +669,32 @@ def cng_fetch_alerts(creator_id, session, cng_ref):
 def cng_alert_settings(config, alert_type):
     """Return the configured media settings for one CNG alert type.
 
-    The manager writes these values to ``alerts`` in the runtime config.  They
-    must travel with the SSE event because the browser overlay has no access to
-    the local JSON configuration file.
+    The manager stores alert settings in ``alert_settings.json`` beside the
+    bridge executable. They must travel with the SSE event because the browser
+    overlay cannot read that local JSON file directly.
     """
     alert_type = str(alert_type or "unknown").strip().lower()
     alerts = config.get("alerts", {}) if isinstance(config, dict) else {}
     settings = alerts.get(alert_type, {}) if isinstance(alerts, dict) else {}
     if not isinstance(settings, dict):
         settings = {}
+
+    # Manager and bridge run from the same package directory, but alert media
+    # settings are deliberately stored separately from unified_chat_config.json.
+    # Read them on demand so changes saved in the manager apply while the bridge
+    # is already running. Retain the runtime-config values as a legacy fallback.
+    try:
+        with ALERT_CONFIG_FILE.open("r", encoding="utf-8") as f:
+            stored_alerts = json.load(f)
+        stored_settings = (
+            stored_alerts.get(alert_type, {})
+            if isinstance(stored_alerts, dict)
+            else {}
+        )
+        if isinstance(stored_settings, dict):
+            settings = {**settings, **stored_settings}
+    except (OSError, json.JSONDecodeError):
+        pass
 
     try:
         duration = int(settings.get("duration_seconds", 5))
@@ -7248,22 +7267,31 @@ class Handler(BaseHTTPRequestHandler):
             self.serve_html_file("alerts.html")
             return
 
-        # Serve configured alert sound over HTTP so OBS/Chromium does not
-        # have to play a local file:// audio resource.
+        # Serve configured alert media over HTTP so OBS/Chromium does not
+        # have to access local files through file:// URLs.
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path == "/alert-media":
             params = urllib.parse.parse_qs(parsed.query)
             alert_type = str((params.get("type") or [""])[0]).strip().lower()
             kind = str((params.get("kind") or ["sound"])[0]).strip().lower()
-            if alert_type not in ALERT_OVERLAY_TYPES or kind != "sound":
+            if alert_type not in ALERT_OVERLAY_TYPES or kind not in {"gif", "sound"}:
                 self.send_error(404)
                 return
             try:
                 runtime = load_config()
                 settings = cng_alert_settings(runtime, alert_type)
-                media_path = str(settings.get("sound") or "").strip()
+                media_path = str(settings.get(kind) or "").strip()
                 if not media_path:
-                    raise FileNotFoundError("Kein Sound konfiguriert")
+                    raise FileNotFoundError(f"Kein {kind} konfiguriert")
+
+                if media_path.lower().startswith("file:"):
+                    file_url = urllib.parse.urlparse(media_path)
+                    media_path = urllib.request.url2pathname(file_url.path)
+                    if file_url.netloc:
+                        media_path = "\\\\" + file_url.netloc + media_path.replace("/", "\\")
+                    elif os.name == "nt" and re.match(r"^/[A-Za-z]:[/\\]", media_path):
+                        media_path = media_path[1:]
+
                 media_path = os.path.expandvars(os.path.expanduser(media_path))
                 if not os.path.isabs(media_path):
                     media_path = os.path.join(BASE_DIR, media_path)
@@ -7272,17 +7300,19 @@ class Handler(BaseHTTPRequestHandler):
                     raise FileNotFoundError(media_path)
                 with open(media_path, "rb") as f:
                     body = f.read()
+                content_type = mimetypes.guess_type(media_path)[0] or "application/octet-stream"
                 self.send_response(200)
-                self.send_header("Content-Type", "audio/mpeg")
+                self.send_header("Content-Type", content_type)
                 self.send_header("Cache-Control", "no-cache, no-store")
                 self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("X-Content-Type-Options", "nosniff")
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
-                print(f"[ALERT MEDIA] Sound ausgeliefert: {alert_type} | {media_path}")
+                print(f"[ALERT MEDIA] {kind.title()} ausgeliefert: {alert_type} | {media_path}")
             except Exception as e:
-                print(f"[ALERT MEDIA] Sound konnte nicht geladen werden: {alert_type} | {e!r}")
-                self.send_error(404, "Alert-Sound nicht gefunden")
+                print(f"[ALERT MEDIA] {kind.title()} konnte nicht geladen werden: {alert_type} | {e!r}")
+                self.send_error(404, f"Alert-{kind} nicht gefunden")
             return
 
         if self.path == "/config-events":
