@@ -100,13 +100,14 @@ if errorlevel 1 goto :fail
     echo Start: CNG_MultiChat_Manager.exe
     echo Der Manager startet die Bridge bei Bedarf selbst.
     echo HTML-Ressourcen: alerts.html, cng-multichat-livechat.html, cng-multichat-overlay.html und cng-multichat-overlay_horizontal.html
+    echo Mehrplattform-Statistik: http://127.0.0.1:8765/stats
     echo Bitte den gesamten Ordner entpackt lassen und an einen beschreibbaren Ort verschieben.
     echo Konfigurationen und Logs werden neben dem Programm abgelegt.
     echo Autostart, minimierter Start und Minimieren ins Tray koennen im Manager unter Einstellungen aktiviert werden.
-    echo Schliessen ueber X blendet den Manager ins Tray aus; vollstaendiges Beenden ueber das Tray-Menue.
+    echo Schliessen ueber X blendet den Manager ins Tray aus; beim Beenden ueber das Tray-Menue werden Manager und Bridge beendet.
     echo Python muss auf dem Ziel-PC nicht installiert sein.
     echo Benutzeranleitung: CNG_MultiChat_Installations_und_Benutzeranleitung.pdf
-    echo Lizenz: MIT (siehe LICENSE)
+    echo Lizenz: MIT - siehe LICENSE
 ) > "%RELEASE_DIR%\CNG_MultiChat_Manager\Liesmich.txt"
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Compress-Archive -Path '%RELEASE_DIR%\CNG_MultiChat_Manager\*' -DestinationPath '%RELEASE_DIR%\CNG_MultiChat_Manager_Windows.zip' -Force"

@@ -7150,17 +7150,18 @@ CNG_STATUS_HTML = r'''<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>CNG Multi-Platform Status</title>
 <style>
-:root{--bg:#111318;--head:#0c0e12;--line:#292e35;--text:#f1f3f5;--muted:#858c96;--accent:#ff8a00;--status-font:11px}
+:root{--bg:#090512;--head:#10091b;--line:rgba(177,91,255,.32);--text:#f7f1ff;--muted:#b7a7c8;--accent:#ff8a00;--status-font:11px;--purple:#a641ff;--pink:#ff35a6}
 *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}
 body{font-family:"Segoe UI",Arial,sans-serif;color:var(--text);padding:6px}
-.card{width:100%;height:100%;border:1px solid var(--line);border-radius:10px;background:linear-gradient(145deg,rgba(23,26,33,.97),rgba(12,14,18,.97));padding:8px}
+.card{width:100%;height:100%;border:1px solid var(--line);border-radius:10px;background:linear-gradient(145deg,rgba(25,11,41,.98),rgba(9,5,18,.98));padding:8px;box-shadow:0 0 22px rgba(166,65,255,.15)}
 .header{display:flex;align-items:center;gap:6px;height:25px;border-bottom:1px solid var(--line);padding-bottom:6px;margin-bottom:6px}
-.logo{font-size:calc(var(--status-font)*1.05);font-weight:800}.logo span{color:var(--accent)}
-.status{margin-left:auto;font-size:8px;color:var(--muted);display:flex;align-items:center;gap:5px}.dot{width:6px;height:6px;border-radius:50%;background:#39d98a}.dot.off{background:#ff5d67}
-.btn{border:1px solid var(--line);background:#1c2025;color:#c7ccd2;border-radius:4px;padding:2px 6px;font-size:8px;cursor:pointer}.btn:hover{background:#282d33;color:#fff}.font-size{width:28px;text-align:center;font-size:8px;color:var(--muted)}
-.total{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:7px}.totalBox{background:#1c2028;border:1px solid #292e38;border-radius:7px;padding:5px 8px;display:flex;justify-content:space-between;align-items:baseline}.totalLabel{font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px}.totalValue{font-size:calc(var(--status-font)*1.45);font-weight:800}
-table{width:100%;border-collapse:separate;border-spacing:0;background:#15181e;border:1px solid #292e38;border-radius:7px;overflow:hidden;font-size:var(--status-font)}
-th{font-size:8px;color:#858c96;text-transform:uppercase;letter-spacing:.45px;font-weight:700;padding:4px 3px;border-bottom:1px solid #292e38}td{padding:4px 3px;text-align:center;border-bottom:1px solid #22262d;white-space:nowrap}tr:last-child td{border-bottom:0}.rowlabel{text-align:left;color:#b7bdc6;font-size:calc(var(--status-font)*.82);font-weight:700;padding-left:7px}.platform{font-weight:700}.num{font-variant-numeric:tabular-nums;font-weight:650}.offline{opacity:.48}.dotp{display:inline-block;width:5px;height:5px;border-radius:50%;margin-right:3px;background:#39d98a}.offline .dotp{background:#626973}.footer{margin-top:5px;color:#626a73;font-size:7px;text-align:right}
+.logo{font-size:calc(var(--status-font)*1.05);font-weight:800}.logo span{background:linear-gradient(90deg,#ff8a00,#ff4e9b,#a641ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.status{margin-left:auto;font-size:8px;color:var(--muted);display:flex;align-items:center;gap:5px}.dot{width:6px;height:6px;border-radius:50%;background:#39d98a;box-shadow:0 0 8px rgba(57,217,138,.65)}.dot.off{background:#ff5d67;box-shadow:0 0 8px rgba(255,93,103,.55)}
+.btn{border:1px solid rgba(177,91,255,.34);background:rgba(25,12,40,.94);color:#eee3fa;border-radius:999px;padding:2px 7px;font-size:8px;cursor:pointer;transition:background .15s ease,border-color .15s ease,box-shadow .15s ease}.btn:hover{background:#28113c;border-color:rgba(206,119,255,.75);box-shadow:0 0 10px rgba(166,65,255,.18);color:#fff}.font-size{width:28px;text-align:center;font-size:8px;color:#c7b1d8}
+.total{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:7px}.totalBox{background:linear-gradient(130deg,rgba(39,16,59,.96),rgba(17,8,28,.96));border:1px solid rgba(177,91,255,.28);border-radius:7px;padding:5px 8px;display:flex;justify-content:space-between;align-items:baseline}.totalBox:first-child{border-left:3px solid var(--accent)}.totalBox:last-child{border-left:3px solid var(--pink)}.totalLabel{font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px}.totalValue{font-size:calc(var(--status-font)*1.45);font-weight:800;color:#fff}
+table{width:100%;border-collapse:separate;border-spacing:0;background:rgba(15,7,24,.96);border:1px solid rgba(177,91,255,.3);border-radius:7px;overflow:hidden;font-size:var(--status-font)}
+th{font-size:8px;color:#c4a8dd;text-transform:uppercase;letter-spacing:.45px;font-weight:700;padding:4px 3px;border-bottom:1px solid rgba(177,91,255,.28)}td{padding:4px 3px;text-align:center;border-bottom:1px solid rgba(177,91,255,.14);white-space:nowrap}tr:last-child td{border-bottom:0}.rowlabel{text-align:left;color:#e4d5f2;font-size:calc(var(--status-font)*.82);font-weight:700;padding-left:7px}.platform{font-weight:700}.num{font-variant-numeric:tabular-nums;font-weight:650}.offline{opacity:.48}.dotp{display:inline-block;width:5px;height:5px;border-radius:50%;margin-right:3px;background:#39d98a}.offline .dotp{background:#626973}.footer{margin-top:5px;color:#a18eaf;font-size:7px;text-align:right}
+@media(max-width:560px){.card{padding:6px}.totalBox{padding:4px 6px}table{font-size:min(var(--status-font),10px)}th,td{padding-left:2px;padding-right:2px}}
 </style></head><body>
 <div class="card">
  <div class="header"><div class="logo">CNG <span>Multi-Platform</span></div><div class="status"><i id="dot" class="dot"></i><span id="conn">Bridge verbunden</span></div><button id="fontDown" class="btn">A−</button><span id="fontSize" class="font-size">11px</span><button id="fontUp" class="btn">A+</button></div>
@@ -7358,7 +7359,9 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(body)
             return
 
-        if self.path in ("/cng-status", "/cng-status.html"):
+        if urllib.parse.urlparse(self.path).path in (
+            "/cng-status", "/cng-status.html", "/stats", "/stats.html"
+        ):
             body = CNG_STATUS_HTML.encode("utf-8")
             self.send_response(200)
             self.send_header(
@@ -7615,6 +7618,7 @@ def main():
     print("Live Chat: http://127.0.0.1:8765/livechat")
     print("Alerts: http://127.0.0.1:8765/alerts")
     print("CNG Status: http://127.0.0.1:8765/cng-status")
+    print("Stats: http://127.0.0.1:8765/stats")
     print("Health: http://127.0.0.1:8765/health")
     print("==========================================")
 

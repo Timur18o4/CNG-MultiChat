@@ -4,15 +4,19 @@ CNG MultiChat ist ein Windows-Programm, das mehrere Plattform-Chats über einen 
 
 ## Downloads
 
-Das fertige Windows-Paket wird auf der GitHub-Seite unter **Releases** bereitgestellt. Das ZIP vollständig entpacken und `CNG_MultiChat_Manager.exe` starten. Python wird auf dem Ziel-PC nicht benötigt. Die HTML-Dateien und die PDF-Anleitung gehören zum Paket.
+Das fertige Windows-Paket wird auf der GitLab-Projektseite unter **Releases** bereitgestellt. Das ZIP vollständig entpacken und `CNG_MultiChat_Manager.exe` starten. Python wird auf dem Ziel-PC nicht benötigt. Die HTML-Dateien und die PDF-Anleitung gehören zum Paket.
 
-GitHub stellt auf der Release-Seite zusätzlich automatisch den jeweiligen Quellcode als ZIP bereit. Der Quellcode kann außerdem über **Code → Download ZIP** geladen werden.
+Der Quellcode liegt im GitLab-Repository. Das fertige Windows-Paket wird zusätzlich als Release-Datei bereitgestellt.
 
 ## Aus dem Quellcode bauen
 
 Der Quellcode umfasst den Manager, die Bridge, vier HTML-Ansichten, die Build-Datei, die MIT-Lizenz und die Benutzeranleitung. Für einen Windows-Build: den gesamten Repository-Inhalt herunterladen und entpacken, Python 3 und Internetzugriff auf dem Build-PC bereitstellen und `build_release.bat` starten. Die Build-Datei erstellt eine isolierte Umgebung, lädt die benötigten Build-Abhängigkeiten und legt das fertige Community-Paket in einem neuen Ordner unter `release\` ab.
 
 Das Buildkit ist für die Person gedacht, die den Release erstellt. Endnutzer verwenden das fertige Windows-ZIP.
+
+Beim Schließen über das X wird der Manager ins Tray ausgeblendet. Wenn du im Tray-Menü **Bridge und Manager beenden** wählst, werden beide Prozesse beendet.
+
+Die Mehrplattform-Statistik mit Zuschauer- und Followerzahlen ist unter `http://127.0.0.1:8765/stats` erreichbar. Die bisherige Adresse `/cng-status` bleibt als Alias verfügbar.
 
 ## Konfiguration und Datenschutz
 

@@ -18,6 +18,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+import webbrowser
 
 APP_NAME = "CNG MultiChat Manager "
 BASE_DIR = os.path.dirname(os.path.abspath(sys.executable if getattr(sys, "frozen", False) else __file__))
@@ -359,6 +360,7 @@ class BridgeService:
         self.runtime_dir = os.path.join(tempfile.gettempdir(), "UnifiedChatBridge")
         self.log_file = os.path.join(self.runtime_dir, "bridge.log")
         self.starting = False
+        self.process_lock = threading.RLock()
 
     def decrypt_auth(self, account):
         result = {}
@@ -452,9 +454,17 @@ class BridgeService:
         return self.write_persistent_config()
 
     def start(self):
-        if self.process and self.process.poll() is None:
-            self.manager.update_status("Bridge läuft")
+        if self.manager.quitting:
             return
+
+        with self.process_lock:
+            if self.manager.quitting:
+                return
+            if self.process and self.process.poll() is None:
+                self.manager.update_status("Bridge läuft")
+                return
+            if self.starting:
+                return
 
         if getattr(sys, "frozen", False):
             if not os.path.isfile(BRIDGE_EXE):
@@ -474,10 +484,13 @@ class BridgeService:
             self.manager.update_status("Keine Konten – Bridge wartet")
             return
 
-        if self.starting:
-            return
-
-        self.starting = True
+        with self.process_lock:
+            if self.manager.quitting or self.starting:
+                return
+            if self.process and self.process.poll() is None:
+                self.manager.update_status("Bridge läuft")
+                return
+            self.starting = True
         self.manager.update_status("Bridge wird gestartet …")
 
         def worker():
@@ -514,33 +527,42 @@ class BridgeService:
                     else:
                         bridge_cmd = [sys.executable, "-u", BRIDGE_SOURCE]
 
-                    self.process = subprocess.Popen(
-                        bridge_cmd,
-                        **kwargs
-                    )
+                    # Serialize process creation with shutdown. If the user
+                    # exits from the tray while dependencies/config are being
+                    # prepared, the bridge must not start after the Manager.
+                    with self.process_lock:
+                        if self.manager.quitting:
+                            return
+                        process = subprocess.Popen(bridge_cmd, **kwargs)
+                        self.process = process
 
-                self.manager.after(0, lambda: self.manager.update_status(
-                    f"Bridge läuft (PID {self.process.pid})"
-                ))
-                self.manager.after(0, self.manager.update_bridge_buttons)
-                self.manager.after(0, self.monitor)
+                if not self.manager.quitting:
+                    self.manager.after(0, lambda: self.manager.update_status(
+                        f"Bridge läuft (PID {process.pid})"
+                    ))
+                    self.manager.after(0, self.manager.update_bridge_buttons)
+                    self.manager.after(0, self.monitor)
 
             except Exception as ex:
-                self.manager.after(0, lambda: self.manager.update_status("Bridge-Start fehlgeschlagen"))
-                error_message = str(ex)
-                self.manager.after(
-                    0,
-                    lambda error=error_message: messagebox.showerror(
-                        APP_NAME,
-                        "Bridge konnte nicht gestartet werden:\n\n" + error
+                if not self.manager.quitting:
+                    self.manager.after(0, lambda: self.manager.update_status("Bridge-Start fehlgeschlagen"))
+                    error_message = str(ex)
+                    self.manager.after(
+                        0,
+                        lambda error=error_message: messagebox.showerror(
+                            APP_NAME,
+                            "Bridge konnte nicht gestartet werden:\n\n" + error
+                        )
                     )
-                )
             finally:
-                self.starting = False
+                with self.process_lock:
+                    self.starting = False
 
         threading.Thread(target=worker, daemon=True).start()
 
     def monitor(self):
+        if self.manager.quitting:
+            return
         if not self.process:
             return
         if self.process.poll() is None:
@@ -553,37 +575,34 @@ class BridgeService:
         self.manager.update_status(f"Bridge beendet (Code {code})")
 
     def stop(self):
-        p = self.process
-        if not p:
-            self.process = None
-            self.manager.update_bridge_buttons()
-            return
-
-        try:
-            if p.poll() is None:
-                if os.name == "nt":
-                    # PyInstaller --onefile runs a bootloader parent and an
-                    # application child. Terminating only Popen's PID leaves
-                    # the child behind, so stop the complete process tree.
-                    subprocess.run(
-                        ["taskkill", "/PID", str(p.pid), "/T", "/F"],
-                        stdin=subprocess.DEVNULL,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        creationflags=subprocess.CREATE_NO_WINDOW,
-                        check=False,
-                    )
-                else:
-                    p.terminate()
+        with self.process_lock:
+            p = self.process
+            if p:
                 try:
-                    p.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    p.kill()
-                    p.wait(timeout=2)
-        except Exception:
-            pass
-        finally:
-            self.process = None
+                    if p.poll() is None:
+                        if os.name == "nt":
+                            # PyInstaller --onefile runs a bootloader parent and an
+                            # application child. Terminating only Popen's PID leaves
+                            # the child behind, so stop the complete process tree.
+                            subprocess.run(
+                                ["taskkill", "/PID", str(p.pid), "/T", "/F"],
+                                stdin=subprocess.DEVNULL,
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL,
+                                creationflags=subprocess.CREATE_NO_WINDOW,
+                                check=False,
+                            )
+                        else:
+                            p.terminate()
+                        try:
+                            p.wait(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            p.kill()
+                            p.wait(timeout=2)
+                except Exception:
+                    pass
+                finally:
+                    self.process = None
 
         self.manager.update_bridge_buttons()
         self.manager.update_status("Bridge beendet")
@@ -1843,14 +1862,16 @@ class Manager(tk.Tk):
 
     def setup_style(self):
         self.colors = {
-            "bg": "#09020f",
-            "panel": "#12071b",
-            "panel2": "#180a22",
-            "border": "#352044",
+            "bg": "#0b0612",
+            "panel": "#13091e",
+            "panel2": "#1b0d2b",
+            "border": "#432653",
             "text": "#ffffff",
-            "muted": "#9e92aa",
+            "muted": "#b2a3c1",
             "orange": "#ff8a00",
             "purple": "#9146ff",
+            "pink": "#ed38c8",
+            "accent": "#d83bdd",
             "green": "#53fc18",
             "cyan": "#00f2ea",
             "red": "#ff3b30",
@@ -1870,9 +1891,9 @@ class Manager(tk.Tk):
                         borderwidth=0, focusthickness=0, padding=(12, 8),
                         font=("Segoe UI", 9, "bold"))
         style.map("TButton", background=[("active", "#29113a"), ("pressed", "#321348")])
-        style.configure("Accent.TButton", background=self.colors["orange"], foreground="#160800",
+        style.configure("Accent.TButton", background=self.colors["accent"], foreground="#ffffff",
                         padding=(14, 9))
-        style.map("Accent.TButton", background=[("active", "#ff9f2d"), ("pressed", "#e77a00")])
+        style.map("Accent.TButton", background=[("active", "#ed54df"), ("pressed", "#b82ac4")])
         style.configure("Danger.TButton", background="#3a1018", foreground="#ff8d9d",
                         padding=(12, 8))
         style.map("Danger.TButton", background=[("active", "#541521")])
@@ -1911,20 +1932,22 @@ class Manager(tk.Tk):
         tk.Label(brand, text="CNG", bg="#0d0414", fg="#fff",
                  font=("Segoe UI", 18, "bold")).pack(anchor="w")
         tk.Label(brand, text="CNG MultiChat Manager", bg="#0d0414",
-                 fg=self.colors["orange"], font=("Segoe UI", 9, "bold")).pack(anchor="w")
-        tk.Frame(sidebar, bg=self.colors["orange"], height=2).pack(fill="x", padx=18, pady=(0, 18))
+                 fg=self.colors["pink"], font=("Segoe UI", 9, "bold")).pack(anchor="w")
+        brand_rule = tk.Canvas(sidebar, bg="#0d0414", height=3, highlightthickness=0)
+        brand_rule.pack(fill="x", padx=18, pady=(0, 18))
+        brand_rule.bind("<Configure>", lambda event: self.draw_cng_gradient(brand_rule))
 
         tk.Label(sidebar, text="VERWALTUNG", bg="#0d0414", fg="#6f6278",
                  font=("Segoe UI", 8, "bold")).pack(anchor="w", padx=18, pady=(0, 8))
 
         self.nav_items = {}
 
-        def nav(text, command=None, active=False):
-            bg = "#25102f" if active else "#0d0414"
-            fg = self.colors["orange"] if active else "#d9d0df"
+        def nav(text, command=None, active=False, nested=False):
+            bg = "#28133c" if active else "#0d0414"
+            fg = self.colors["pink"] if active else "#d9d0df"
             f = tk.Frame(sidebar, bg=bg)
             f.pack(fill="x", padx=10, pady=3)
-            marker = tk.Frame(f, bg=self.colors["orange"] if active else bg, width=3)
+            marker = tk.Frame(f, bg=self.colors["pink"] if active else bg, width=3)
             marker.pack(side="left", fill="y")
 
             def select(section=text, callback=command):
@@ -1933,9 +1956,12 @@ class Manager(tk.Tk):
                     callback()
 
             button = tk.Button(f, text=text, command=select, bg=bg, fg=fg,
-                               activebackground="#25102f", activeforeground="#fff",
-                               relief="flat", bd=0, anchor="w", padx=12, pady=9,
-                               font=("Segoe UI", 9, "bold"), cursor="hand2")
+                               activebackground="#28133c", activeforeground="#fff",
+                               relief="flat", bd=0, anchor="w",
+                               padx=21 if nested else 12,
+                               pady=7 if nested else 9,
+                               font=("Segoe UI", 8 if nested else 9, "bold"),
+                               cursor="hand2")
             button.pack(fill="x")
             self.nav_items[text] = (f, marker, button)
 
@@ -1945,6 +1971,7 @@ class Manager(tk.Tk):
         nav("⚡   Command Bot", command=self.show_command_bot_settings)
         nav("◉   OBS", command=self.show_obs_settings)
         nav("⚙   Einstellungen", command=self.show_settings)
+        nav("↳   Über / Kanäle", command=self.show_about, nested=True)
 
         tk.Label(sidebar, text="PLATTFORMEN", bg="#0d0414", fg="#6f6278",
                  font=("Segoe UI", 8, "bold")).pack(anchor="w", padx=18, pady=(28, 8))
@@ -1994,7 +2021,7 @@ class Manager(tk.Tk):
         )
         self.page_description_label.pack(anchor="w", pady=(4, 0))
         self.top_status = tk.StringVar(value="CNG MultiChat Manager")
-        tk.Label(header, textvariable=self.top_status, bg="#160820", fg=self.colors["orange"],
+        tk.Label(header, textvariable=self.top_status, bg="#1b0d2b", fg=self.colors["pink"],
                  padx=14, pady=7, font=("Segoe UI", 8, "bold")).pack(side="right", anchor="n")
 
         # Keep the bridge controls in a compact toolbar above the account
@@ -2069,7 +2096,7 @@ class Manager(tk.Tk):
         lb = tk.Frame(list_panel, bg=self.colors["panel"])
         lb.pack(fill="x", padx=12, pady=12)
         tk.Button(lb, text="+ Neues Konto", command=self.new_account,
-                  bg=self.colors["orange"], fg="#160800", activebackground="#ff9f2d",
+                  bg=self.colors["accent"], fg="#ffffff", activebackground="#ed54df",
                   relief="flat", bd=0, pady=8, font=("Segoe UI", 9, "bold"),
                   cursor="hand2").pack(fill="x")
         tk.Button(lb, text="Konto löschen", command=self.delete_account,
@@ -2126,7 +2153,7 @@ class Manager(tk.Tk):
                   relief="flat", bd=0, padx=14, pady=8,
                   font=("Segoe UI", 9, "bold"), cursor="hand2").pack(side="right", padx=(8, 0))
         tk.Button(actions, text="Speichern", command=self.save_current,
-                  bg=self.colors["orange"], fg="#160800", activebackground="#ff9f2d",
+                  bg=self.colors["accent"], fg="#ffffff", activebackground="#ed54df",
                   relief="flat", bd=0, padx=18, pady=8,
                   font=("Segoe UI", 9, "bold"), cursor="hand2").pack(side="right")
 
@@ -2135,12 +2162,41 @@ class Manager(tk.Tk):
     def set_active_navigation(self, active_text):
         for text, (frame, marker, button) in getattr(self, "nav_items", {}).items():
             active = text == active_text
-            bg = "#25102f" if active else "#0d0414"
+            bg = "#28133c" if active else "#0d0414"
             frame.configure(bg=bg)
-            marker.configure(bg=self.colors["orange"] if active else bg)
+            marker.configure(bg=self.colors["pink"] if active else bg)
             button.configure(
                 bg=bg,
-                fg=self.colors["orange"] if active else "#d9d0df",
+                fg=self.colors["pink"] if active else "#d9d0df",
+            )
+
+    def draw_cng_gradient(self, canvas):
+        """Draw the orange-to-pink-to-violet accent used by the CNG website."""
+        width = max(1, canvas.winfo_width())
+        height = max(1, canvas.winfo_height())
+        stops = (self.colors["orange"], self.colors["pink"], self.colors["purple"])
+
+        def rgb(value):
+            value = value.lstrip("#")
+            return tuple(int(value[index:index + 2], 16) for index in (0, 2, 4))
+
+        def hex_color(parts):
+            return "#%02x%02x%02x" % parts
+
+        first, middle, last = (rgb(color) for color in stops)
+        segments = min(180, width)
+        canvas.delete("cng-gradient")
+        for index in range(segments):
+            position = index / max(1, segments - 1)
+            if position <= 0.5:
+                start, end, ratio = first, middle, position * 2
+            else:
+                start, end, ratio = middle, last, (position - 0.5) * 2
+            color = hex_color(tuple(round(a + (b - a) * ratio) for a, b in zip(start, end)))
+            x0 = int(index * width / segments)
+            x1 = int((index + 1) * width / segments) + 1
+            canvas.create_rectangle(
+                x0, 0, x1, height, fill=color, outline="", tags="cng-gradient"
             )
 
     def _show_manager_section(
@@ -2185,6 +2241,106 @@ class Manager(tk.Tk):
             self.account_list.selection_set(selected_index)
             self.account_list.see(selected_index)
             self.on_select()
+
+    def show_about(self):
+        self._show_manager_section(
+            "Über CNG MultiChat",
+            "Entwickler, Projekt und Kanäle",
+            "ÜBER CNG MULTICHAT",
+            "CNG MultiChat und die Kanäle von Timur18o4",
+        )
+        self.clear_form()
+
+        hero = tk.Frame(
+            self.form,
+            bg=self.colors["panel2"],
+            highlightbackground=self.colors["border"],
+            highlightthickness=1,
+        )
+        hero.pack(fill="x", pady=(0, 18))
+        hero_text = tk.Frame(hero, bg=self.colors["panel2"])
+        hero_text.pack(fill="x", padx=22, pady=(18, 16))
+        tk.Label(
+            hero_text,
+            text="CNG MULTICHAT",
+            bg=self.colors["panel2"],
+            fg="#ffffff",
+            font=("Segoe UI", 18, "bold"),
+        ).pack(anchor="w")
+        tk.Label(
+            hero_text,
+            text="Von Timur18o4 für Creator und Community",
+            bg=self.colors["panel2"],
+            fg=self.colors["pink"],
+            font=("Segoe UI", 10, "bold"),
+        ).pack(anchor="w", pady=(4, 0))
+        tk.Label(
+            hero_text,
+            text="Kleine Creator. Große Zukunft.",
+            bg=self.colors["panel2"],
+            fg=self.colors["muted"],
+            font=("Segoe UI", 9),
+        ).pack(anchor="w", pady=(5, 0))
+        gradient = tk.Canvas(hero, bg=self.colors["panel2"], height=4, highlightthickness=0)
+        gradient.pack(fill="x", side="bottom")
+        gradient.bind("<Configure>", lambda event: self.draw_cng_gradient(gradient))
+
+        ttk.Label(self.form, text="Kanäle & Profile", style="Header.TLabel").pack(
+            anchor="w", pady=(0, 4)
+        )
+        ttk.Label(
+            self.form,
+            text="Öffnet den jeweiligen Kanal in deinem Standardbrowser.",
+            style="Sub.TLabel",
+        ).pack(anchor="w", pady=(0, 12))
+
+        channels = (
+            ("CNG-Plattform", "timur18o4", "https://cng-plattform.com/timur18o4", self.colors["orange"]),
+            ("Kick", "timur18o4", "https://kick.com/timur18o4", self.colors["green"]),
+            ("Twitch", "timur18o4", "https://www.twitch.tv/timur18o4", self.colors["purple"]),
+            ("TikTok", "@timur18o4", "https://www.tiktok.com/@timur18o4", self.colors["cyan"]),
+            ("YouTube", "@timur18o4", "https://www.youtube.com/@timur18o4", self.colors["red"]),
+        )
+        channel_grid = tk.Frame(self.form, bg=self.colors["panel"])
+        channel_grid.pack(fill="x", pady=(0, 14))
+        channel_grid.columnconfigure(0, weight=1)
+        channel_grid.columnconfigure(1, weight=1)
+
+        for index, (platform, handle, url, color) in enumerate(channels):
+            row, column = divmod(index, 2)
+            card = tk.Frame(
+                channel_grid,
+                bg=self.colors["panel2"],
+                highlightbackground=self.colors["border"],
+                highlightthickness=1,
+            )
+            card.grid(
+                row=row,
+                column=column,
+                sticky="nsew",
+                padx=(0, 8) if column == 0 else (4, 0),
+                pady=(0, 8),
+            )
+            tk.Frame(card, bg=color, width=4).pack(side="left", fill="y")
+            button = tk.Button(
+                card,
+                text=f"{platform}  ·  {handle}     ↗",
+                command=lambda target=url: webbrowser.open_new_tab(target),
+                bg=self.colors["panel2"],
+                fg="#ffffff",
+                activebackground="#28133c",
+                activeforeground="#ffffff",
+                relief="flat",
+                bd=0,
+                anchor="w",
+                padx=13,
+                pady=15,
+                font=("Segoe UI", 9, "bold"),
+                cursor="hand2",
+            )
+            button.pack(fill="both", expand=True)
+
+        self.update_status("Über CNG MultiChat")
 
     def show_bridge_page(self):
         self._show_manager_section(
@@ -2826,7 +2982,7 @@ class Manager(tk.Tk):
                 ),
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem(
-                    "Beenden",
+                    "Bridge und Manager beenden",
                     lambda icon,item:self.after(0,self.quit_application)
                 )
             )
@@ -2877,6 +3033,9 @@ class Manager(tk.Tk):
             return
         self.quitting=True
 
+        # Stop synchronously before closing the tray icon or destroying Tk.
+        # BridgeService.stop() also serializes with startup, so a pending
+        # background start cannot outlive the Manager.
         try:
             self.bridge.stop()
         except Exception:
