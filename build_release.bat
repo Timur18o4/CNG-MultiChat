@@ -18,6 +18,12 @@ if not exist "unified_chat_bridge.py" (
     echo FEHLER: unified_chat_bridge.py fehlt neben dieser Datei.
     goto :fail
 )
+for %%F in (pi_deployment.py install_pi.sh requirements-linux.txt Raspberry-Pi-Bereitstellung.md) do (
+    if not exist "%%F" (
+        echo FEHLER: %%F fehlt. Die Raspberry-Pi-Bereitstellung kann nicht erstellt werden.
+        goto :fail
+    )
+)
 for %%F in (alerts.html cng-multichat-livechat.html cng-multichat-overlay.html cng-multichat-overlay_horizontal.html) do (
     if not exist "%%F" (
         echo FEHLER: %%F fehlt neben dieser Datei und muss im Release enthalten sein.
@@ -62,7 +68,7 @@ if not exist "%PYI%" (
 echo Installiere oder pruefe Build-Werkzeuge und Programmabhaengigkeiten ...
 "%PYI%" -m pip install --upgrade pip
 if errorlevel 1 goto :fail
-"%PYI%" -m pip install pyinstaller requests websocket-client TikTokLive Pillow pystray
+"%PYI%" -m pip install pyinstaller requests websocket-client TikTokLive Pillow pystray paramiko
 if errorlevel 1 goto :fail
 
 echo Erzeuge Bridge-EXE ...
@@ -79,11 +85,17 @@ echo Erzeuge Manager-EXE ...
     --distpath "%RELEASE_DIR%" --workpath build\manager-work --specpath build\spec ^
     --collect-all TikTokLive --copy-metadata TikTokLive ^
     --collect-all pystray --collect-all PIL --hidden-import websocket ^
+    --collect-all paramiko --collect-all cryptography --collect-all bcrypt --collect-all nacl ^
     CNG_MultiChat_Manager.py
 if errorlevel 1 goto :fail
 
 copy /y "build\bridge-dist\UnifiedChatBridge.exe" "%RELEASE_DIR%\CNG_MultiChat_Manager\UnifiedChatBridge.exe" >nul
 if errorlevel 1 goto :fail
+
+for %%F in (unified_chat_bridge.py pi_deployment.py install_pi.sh requirements-linux.txt Raspberry-Pi-Bereitstellung.md) do (
+    copy /y "%%F" "%RELEASE_DIR%\CNG_MultiChat_Manager\%%F" >nul
+    if errorlevel 1 goto :fail
+)
 
 for %%F in (alerts.html cng-multichat-livechat.html cng-multichat-overlay.html cng-multichat-overlay_horizontal.html) do (
     copy /y "%%F" "%RELEASE_DIR%\CNG_MultiChat_Manager\%%F" >nul
@@ -99,15 +111,15 @@ if errorlevel 1 goto :fail
     echo.
     echo Start: CNG_MultiChat_Manager.exe
     echo Der Manager startet die Bridge bei Bedarf selbst.
+    echo Unter Raspberry Pi kann die aktuelle Bridge-Konfiguration per SSH auf Raspberry Pi OS 64-Bit uebertragen werden.
     echo HTML-Ressourcen: alerts.html, cng-multichat-livechat.html, cng-multichat-overlay.html und cng-multichat-overlay_horizontal.html
-    echo Mehrplattform-Statistik: http://127.0.0.1:8765/stats
     echo Bitte den gesamten Ordner entpackt lassen und an einen beschreibbaren Ort verschieben.
     echo Konfigurationen und Logs werden neben dem Programm abgelegt.
     echo Autostart, minimierter Start und Minimieren ins Tray koennen im Manager unter Einstellungen aktiviert werden.
     echo Schliessen ueber X blendet den Manager ins Tray aus; beim Beenden ueber das Tray-Menue werden Manager und Bridge beendet.
     echo Python muss auf dem Ziel-PC nicht installiert sein.
     echo Benutzeranleitung: CNG_MultiChat_Installations_und_Benutzeranleitung.pdf
-    echo Lizenz: MIT - siehe LICENSE
+    echo Lizenz: MIT (siehe LICENSE)
 ) > "%RELEASE_DIR%\CNG_MultiChat_Manager\Liesmich.txt"
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Compress-Archive -Path '%RELEASE_DIR%\CNG_MultiChat_Manager\*' -DestinationPath '%RELEASE_DIR%\CNG_MultiChat_Manager_Windows.zip' -Force"

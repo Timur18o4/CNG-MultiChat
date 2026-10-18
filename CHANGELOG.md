@@ -1,5 +1,16 @@
 # Änderungen
 
+## v1.0.3 — 19.10.2026
+
+### Raspberry-Pi-Bereitstellung
+
+- Der Manager überträgt die laufende Konfiguration und lokal eingerichtete Alert-Medien per SSH auf Raspberry Pi OS 64-Bit.
+- Der Pi-Installer richtet Abhängigkeiten in einer virtuellen Umgebung und einen automatisch startenden systemd-Dienst ein.
+- Der Bridge-Start schreibt Linux-Startmarken ins systemd-Journal, damit ein fehlender Healthcheck eingegrenzt werden kann.
+- Nach einem fehlgeschlagenen Update startet der Installer die Vorversion nur dann wieder, wenn deren `/health`-Prüfung erfolgreich ist. Andernfalls bleibt der Dienst gestoppt.
+- Python-3.11-Syntaxfehler im Bridge-Start wurden behoben.
+- Die Bereitstellung und der Bridge-Healthcheck wurden auf Raspberry Pi 5 mit Raspberry Pi OS 64-Bit erfolgreich bestätigt. Ein Ende-zu-Ende-Test aller externen Chatplattformen ist davon nicht umfasst.
+
 ## v1.0.2 — 17.10.2026
 
 ### Lumia Stream

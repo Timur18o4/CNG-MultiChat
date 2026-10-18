@@ -1,11 +1,22 @@
 import subprocess
 import threading
+import sys
+
+
+def _pi_startup_trace(stage):
+    """Write Linux-only startup checkpoints to the systemd journal."""
+    if sys.platform.startswith("linux"):
+        print(f"[PI STARTUP] {stage}", flush=True)
+
+
+_pi_startup_trace("Bridge-Modulimport gestartet")
 CNG_DEFAULT_AVATAR = "https://cng-plattform.com/manus-storage/cng-logo-obs-download_d9182c49.png"
 
 
 # Cache for creator-profile data. It is queried ONLY after the live-viewer
 # endpoint has already identified an entry as a Creator via its ``batch`` field.
 from pathlib import Path
+_pi_startup_trace("TikTokLive-Import startet")
 try:
     from TikTokLive import TikTokLiveClient
     from TikTokLive.events import (
@@ -20,6 +31,7 @@ except ImportError:
     GiftEvent = LikeEvent = FollowEvent = ShareEvent = SubNotifyEvent = RoomUserSeqEvent = None
     WebsocketResponseEvent = UnknownEvent = None
     TIKTOK_AVAILABLE = False
+_pi_startup_trace(f"TikTokLive-Import beendet (verfuegbar={TIKTOK_AVAILABLE})")
 
 # -*- coding: utf-8 -*-
 """
@@ -53,18 +65,40 @@ import threading
 import ssl
 import os
 import sys
+
+# Frozen Windows builds may choose cp1252 for redirected console output. Chat
+# messages contain emoji, so make stdout/stderr UTF-8 and escape any invalid
+# surrogate rather than letting a print failure kill the receiver thread.
+def _configure_utf8_output(stream):
+    if stream is None:
+        return
+    reconfigure = getattr(stream, "reconfigure", None)
+    if not callable(reconfigure):
+        return
+    try:
+        reconfigure(encoding="utf-8", errors="backslashreplace")
+    except (OSError, ValueError):
+        pass
+
+
+for _output_stream in (sys.stdout, sys.stderr):
+    _configure_utf8_output(_output_stream)
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import quote, urlparse
 import urllib.request
 import urllib.error
 import uuid
+_pi_startup_trace("requests-Import startet")
 import requests
+_pi_startup_trace("requests-Import beendet")
 from datetime import datetime, timezone
 
+_pi_startup_trace("websocket-Import startet")
 try:
     import websocket
 except ImportError:
     websocket = None
+_pi_startup_trace(f"websocket-Import beendet (verfuegbar={websocket is not None})")
 
 # Bridge workers log from several threads. Serialize complete print calls so
 # unrelated platform messages cannot be spliced into a Kick error line.
@@ -1389,10 +1423,13 @@ class OBSWebSocketClient:
                     str(auth.get("challenge", "")),
                 )
 
+            rpc_version = identify["d"].get("rpcVersion")
+            authentication_configured = bool(identify["d"].get("authentication"))
+            authentication_status = "ja" if authentication_configured else "nein"
             print(
                 "[OBS WS] Identify gesendet | "
-                f"rpcVersion={identify["d"].get("rpcVersion")} | "
-                f"Authentifizierung={'ja' if bool(identify["d"].get("authentication")) else 'nein'}"
+                f"rpcVersion={rpc_version} | "
+                f"Authentifizierung={authentication_status}"
             )
             ws.send(json.dumps(identify))
 
@@ -1404,7 +1441,7 @@ class OBSWebSocketClient:
                 raise RuntimeError(
                     "OBS: Verbindung wurde nach Identify geschlossen "
                     f"(close_code={close_code!r}, close_reason={close_reason!r}, "
-                    f"password_configured={bool(identify["d"].get("authentication"))})."
+                    f"password_configured={authentication_configured})."
                 )
 
             try:
@@ -2151,11 +2188,14 @@ def cng_format_followage(followed_at, now=None):
 
     parts = []
     if years:
-        parts.append(f"{years} {"Jahr" if years == 1 else "Jahre"}")
+        year_label = "Jahr" if years == 1 else "Jahre"
+        parts.append(f"{years} {year_label}")
     if months:
-        parts.append(f"{months} {"Monat" if months == 1 else "Monate"}")
+        month_label = "Monat" if months == 1 else "Monate"
+        parts.append(f"{months} {month_label}")
     if days or not parts:
-        parts.append(f"{days} {"Tag" if days == 1 else "Tage"}")
+        day_label = "Tag" if days == 1 else "Tage"
+        parts.append(f"{days} {day_label}")
 
     return ", ".join(parts)
 
@@ -7798,7 +7838,9 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    _pi_startup_trace("main erreicht; lade Bridge-Konfiguration")
     config = apply_accounts_to_config(load_config())
+    _pi_startup_trace("erste Konfigurationsrunde beendet")
 
     # Windows-only convenience command:
     #   python unified_chat_bridge_systemevents_v8_twitch_device_auth.py --twitch-auth
@@ -7820,6 +7862,7 @@ def main():
         return
 
     config = apply_accounts_to_config(load_config())
+    _pi_startup_trace("Konfiguration geladen; initialisiere Bridge-Threads")
 
     print("==========================================")
     print(" CNG MultiChat Bridge")
@@ -7967,6 +8010,7 @@ def main():
         (HOST, PORT),
         Handler
     )
+    _pi_startup_trace(f"HTTP-Server gebunden auf {HOST}:{PORT}; Healthcheck verfuegbar")
 
     try:
         server.serve_forever()

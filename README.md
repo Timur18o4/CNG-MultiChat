@@ -1,22 +1,26 @@
 # CNG MultiChat
 
-CNG MultiChat ist ein Windows-Programm, das mehrere Plattform-Chats über einen Manager und eine lokale Bridge in Browseransichten bereitstellt.
+CNG MultiChat verbindet Chats und Statistiken mehrerer Plattformen mit Browser-Ansichten für Streams. Der Windows-Manager verwaltet die Konten und startet die Bridge.
 
 ## Downloads
 
-Das fertige Windows-Paket wird auf der [GitHub-Projektseite unter **Releases**](https://github.com/Timur18o4/CNG-MultiChat/releases) bereitgestellt. Das ZIP vollständig entpacken und `CNG_MultiChat_Manager.exe` starten. Python wird auf dem Ziel-PC nicht benötigt. Die HTML-Dateien und die PDF-Anleitung gehören zum Paket.
+Das fertige Windows-Paket gibt es unter [GitHub Releases](https://github.com/Timur18o4/CNG-MultiChat/releases). ZIP vollständig entpacken und `CNG_MultiChat_Manager.exe` starten. Auf dem Ziel-PC wird keine Python-Installation benötigt. Die HTML-Dateien und die PDF-Anleitung gehören zum Paket.
 
-Der Quellcode liegt im [GitHub-Repository](https://github.com/Timur18o4/CNG-MultiChat). Das fertige Windows-Paket wird zusätzlich als Release-Datei bereitgestellt.
+Der vollständige Quellcode steht in diesem Repository unter MIT-Lizenz.
+
+## Raspberry Pi
+
+Der Manager kann die aktuelle Konfiguration per SSH auf einen Raspberry Pi 5 mit Raspberry Pi OS 64-Bit übertragen. Die Einrichtung installiert die Linux-Abhängigkeiten in einer virtuellen Umgebung und richtet einen systemd-Dienst für den automatischen Start ein. Lokal konfigurierte Alert-GIFs und Sounds werden mit übertragen. Anleitung und Grenzen stehen in [Raspberry-Pi-Bereitstellung.md](Raspberry-Pi-Bereitstellung.md).
+
+Der Pi stellt Overlay, Livechat, Alerts und Stats über das lokale Netzwerk bereit. Die HTTP-Seiten haben keinen Login. Port `8765` nur im vertrauenswürdigen LAN oder über VPN erreichbar machen, nicht direkt öffentlich freigeben.
 
 ## Aus dem Quellcode bauen
 
-Der Quellcode umfasst den Manager, die Bridge, vier HTML-Ansichten, die Build-Datei, die MIT-Lizenz und die Benutzeranleitung. Für einen Windows-Build: den gesamten Repository-Inhalt herunterladen und entpacken, Python 3 und Internetzugriff auf dem Build-PC bereitstellen und `build_release.bat` starten. Die Build-Datei erstellt eine isolierte Umgebung, lädt die benötigten Build-Abhängigkeiten und legt das fertige Community-Paket in einem neuen Ordner unter `release\` ab.
+Zum Erstellen des Windows-Pakets unter Windows Python 3 und Internetzugriff für die Build-Abhängigkeiten bereitstellen und `build_release.bat` starten. Das Build-Skript erstellt eine isolierte Umgebung und legt das fertige Paket in einem neuen Ordner unter `release\` ab. Es enthält Manager, Bridge, HTML-Ressourcen, PDF-Anleitung und die Laufzeitdateien.
 
 Das Buildkit ist für die Person gedacht, die den Release erstellt. Endnutzer verwenden das fertige Windows-ZIP.
 
-Beim Schließen über das X wird der Manager ins Tray ausgeblendet. Wenn du im Tray-Menü **Bridge und Manager beenden** wählst, werden beide Prozesse beendet.
-
-Die Mehrplattform-Statistik mit Zuschauer- und Followerzahlen ist unter `http://127.0.0.1:8765/stats` erreichbar. Die bisherige Adresse `/cng-status` bleibt als Alias verfügbar.
+Beim Schließen über das X wird der Manager ins Tray ausgeblendet. Über **Bridge und Manager beenden** im Tray-Menü werden beide Prozesse beendet. Die Mehrplattform-Statistik ist unter `http://127.0.0.1:8765/stats` erreichbar; `/cng-status` bleibt als Alias verfügbar.
 
 ## Konfiguration und Datenschutz
 
@@ -24,4 +28,4 @@ Konten, Tokens und lokale Einstellungen werden zur Laufzeit in JSON-Dateien nebe
 
 ## Lizenz
 
-Der Quellcode wird unter der MIT-Lizenz bereitgestellt. Siehe [LICENSE](LICENSE).
+Der Quellcode wird unter MIT-Lizenz bereitgestellt. Siehe [LICENSE](LICENSE).

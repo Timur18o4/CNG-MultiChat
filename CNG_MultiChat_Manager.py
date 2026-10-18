@@ -6,6 +6,7 @@ import ctypes.wintypes
 import json
 import re
 import os
+import queue
 import shutil
 import subprocess
 import sys
@@ -156,6 +157,11 @@ def module_available(name):
     except Exception:
         return False
 
+
+def _json_clone(value):
+    """Copy serializable Manager state before background deployment work."""
+    return json.loads(json.dumps(value, ensure_ascii=False))
+
 def pip_install(package):
     return subprocess.check_call([
         sys.executable, "-m", "pip", "install",
@@ -177,6 +183,8 @@ def ensure_runtime_dependencies(update=None):
         missing.append("Pillow")
     if not module_available("pystray"):
         missing.append("pystray")
+    if not module_available("paramiko"):
+        missing.append("paramiko")
 
     for package in missing:
         if update:
@@ -2008,6 +2016,7 @@ class Manager(tk.Tk):
         nav("⚡   Command Bot", command=self.show_command_bot_settings)
         nav("◉   OBS", command=self.show_obs_settings)
         nav("⚙   Einstellungen", command=self.show_settings)
+        nav("▣   Raspberry Pi", command=self.show_pi_deployment)
         nav("↳   Über / Kanäle", command=self.show_about, nested=True)
 
         tk.Label(sidebar, text="PLATTFORMEN", bg="#0d0414", fg="#6f6278",
@@ -2378,6 +2387,251 @@ class Manager(tk.Tk):
             button.pack(fill="both", expand=True)
 
         self.update_status("Über CNG MultiChat")
+
+    def show_pi_deployment(self):
+        self._show_manager_section(
+            "Raspberry Pi",
+            "Die aktuelle Bridge-Konfiguration per SSH auf Raspberry Pi OS übertragen",
+            "PI-BEREITSTELLUNG",
+            "Standalone-Bridge auf Raspberry Pi OS 64-Bit installieren oder aktualisieren",
+        )
+        self.clear_form()
+
+        ttk.Label(self.form, text="Raspberry Pi bereitstellen", style="Header.TLabel").pack(anchor="w")
+        ttk.Label(
+            self.form,
+            text=(
+                "Überträgt Bridge, aktuelle gespeicherte Konten und Einstellungen sowie "
+                "Alert-GIFs und Sounds. Der Pi installiert benötigte Python-Pakete in "
+                "einer eigenen Umgebung und richtet die Bridge als Systemdienst ein. "
+                "Für spätere Exporte wird die vorhandene Installation aktualisiert."
+            ),
+            style="Sub.TLabel",
+            wraplength=780,
+        ).pack(anchor="w", pady=(0, 16))
+
+        fields = ttk.LabelFrame(self.form, text="SSH-Verbindung zum Raspberry Pi", padding=14)
+        fields.pack(fill="x", pady=(0, 14))
+        fields.columnconfigure(1, weight=1)
+
+        host_var = tk.StringVar()
+        port_var = tk.StringVar(value="22")
+        username_var = tk.StringVar()
+        ssh_password_var = tk.StringVar()
+        sudo_password_var = tk.StringVar()
+
+        ttk.Label(fields, text="IP-Adresse oder Hostname").grid(row=0, column=0, sticky="w", padx=(0, 14), pady=6)
+        ttk.Entry(fields, textvariable=host_var, style="TEntry").grid(row=0, column=1, sticky="ew", pady=6)
+        ttk.Label(fields, text="SSH-Port").grid(row=1, column=0, sticky="w", padx=(0, 14), pady=6)
+        ttk.Entry(fields, textvariable=port_var, style="TEntry", width=10).grid(row=1, column=1, sticky="w", pady=6)
+        ttk.Label(fields, text="Linux-Benutzer").grid(row=2, column=0, sticky="w", padx=(0, 14), pady=6)
+        ttk.Entry(fields, textvariable=username_var, style="TEntry").grid(row=2, column=1, sticky="ew", pady=6)
+        ttk.Label(fields, text="SSH-Passwort").grid(row=3, column=0, sticky="w", padx=(0, 14), pady=6)
+        ttk.Entry(fields, textvariable=ssh_password_var, show="*", style="TEntry").grid(row=3, column=1, sticky="ew", pady=6)
+        ttk.Label(fields, text="sudo-Passwort (leer = SSH-Passwort)").grid(row=4, column=0, sticky="w", padx=(0, 14), pady=6)
+        ttk.Entry(fields, textvariable=sudo_password_var, show="*", style="TEntry").grid(row=4, column=1, sticky="ew", pady=6)
+        ttk.Label(
+            fields,
+            text=(
+                "Das Linux-Konto muss SSH-Zugriff und sudo-Rechte haben. Passwörter "
+                "werden nur für diese Übertragung im Arbeitsspeicher verwendet. Beim "
+                "ersten Kontakt wird der SSH-Fingerabdruck zur Bestätigung angezeigt."
+            ),
+            style="Sub.TLabel",
+            wraplength=760,
+        ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(9, 0))
+
+        ttk.Label(
+            self.form,
+            text=(
+                "Hinweis: Wenn OBS, LumiaStream oder Streamer.bot auf diesem Windows-PC "
+                "laufen, werden lokale Zieladressen im Export auf dessen LAN-IP gesetzt. "
+                "Die jeweiligen Dienste und die Windows-Firewall müssen Verbindungen "
+                "aus dem LAN zulassen."
+            ),
+            style="Sub.TLabel",
+            wraplength=790,
+        ).pack(anchor="w", pady=(0, 12))
+
+        stop_local_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            self.form,
+            text=(
+                "Lokale Windows-Bridge nach erfolgreicher Pi-Prüfung beenden "
+                "(verhindert doppelte Chat-/Alert-/Command-Verarbeitung)"
+            ),
+            variable=stop_local_var,
+        ).pack(anchor="w", pady=(0, 12))
+
+        log_frame = ttk.LabelFrame(self.form, text="Übertragungsprotokoll", padding=8)
+        log_frame.pack(fill="both", expand=True, pady=(0, 12))
+        log_text = tk.Text(
+            log_frame, height=10, wrap="word", state="disabled",
+            bg="#0d0414", fg="#e8deef", insertbackground="#ffffff",
+            relief="flat", font=("Consolas", 9),
+        )
+        log_scroll = ttk.Scrollbar(log_frame, orient="vertical", command=log_text.yview)
+        log_text.configure(yscrollcommand=log_scroll.set)
+        log_text.pack(side="left", fill="both", expand=True)
+        log_scroll.pack(side="right", fill="y")
+
+        actions = tk.Frame(self.form, bg=self.colors["panel"])
+        actions.pack(fill="x")
+        start_button = ttk.Button(actions, text="Konfiguration sicher übertragen", style="Accent.TButton")
+        start_button.pack(side="right")
+
+        def append_log(line):
+            try:
+                if not log_text.winfo_exists():
+                    return
+                log_text.configure(state="normal")
+                log_text.insert("end", str(line) + "\n")
+                log_text.see("end")
+                log_text.configure(state="disabled")
+            except tk.TclError:
+                pass
+
+        def start_deployment():
+            host = host_var.get().strip()
+            username = username_var.get().strip()
+            ssh_password = ssh_password_var.get()
+            sudo_password = sudo_password_var.get() or ssh_password
+            stop_local_after_success = bool(stop_local_var.get())
+            try:
+                port = int(port_var.get().strip())
+                if not 1 <= port <= 65535:
+                    raise ValueError
+            except ValueError:
+                messagebox.showwarning(APP_NAME, "Der SSH-Port muss zwischen 1 und 65535 liegen.")
+                return
+            if not host or not username:
+                messagebox.showwarning(APP_NAME, "Bitte Pi-Adresse und Linux-Benutzer eintragen.")
+                return
+            if not ssh_password:
+                messagebox.showwarning(APP_NAME, "Bitte das SSH-Passwort eintragen.")
+                return
+            if not hasattr(self, "bridge"):
+                messagebox.showerror(APP_NAME, "Die Bridge-Konfiguration ist noch nicht verfügbar.")
+                return
+
+            # Capture only saved/current Manager values on the Tk thread. UI
+            # variable objects in alert_settings are intentionally excluded.
+            try:
+                snapshot = {
+                    "accounts": _json_clone(self.accounts),
+                    "bridge_config": self.bridge.build_bridge_config(),
+                    "command_bot_config": _json_clone(self.command_bot_config),
+                    "alert_settings": {
+                        event: {
+                            key: value.get(key)
+                            for key in ("label", "gif", "sound", "duration_seconds")
+                        }
+                        for event, value in self.alert_settings.items()
+                        if isinstance(value, dict)
+                    },
+                    "display_settings": _json_clone(self.display_settings),
+                    "obs_settings": _json_clone(self.obs_settings),
+                }
+            except Exception as ex:
+                messagebox.showerror(APP_NAME, "Aktuelle Manager-Einstellungen konnten nicht vorbereitet werden:\n\n" + str(ex))
+                return
+
+            events = queue.Queue()
+            decision = {"event": None, "accepted": False}
+            start_button.configure(state="disabled")
+            log_text.configure(state="normal")
+            log_text.delete("1.0", "end")
+            log_text.configure(state="disabled")
+            append_log("Paket wird aus den gespeicherten Manager-Einstellungen erzeugt …")
+
+            def worker():
+                import pi_deployment
+
+                cleanup = None
+                try:
+                    archive, local_ip, cleanup = pi_deployment.create_bundle(
+                        BASE_DIR,
+                        target_host=host,
+                        **snapshot,
+                    )
+                    events.put(("log", f"Windows-LAN-IP für lokale Integrationen: {local_ip}"))
+                    events.put(("log", "Prüfe den SSH-Hostschlüssel des Raspberry Pi …"))
+                    key, fingerprint = pi_deployment.fetch_host_key(host, port)
+                    if pi_deployment.host_key_is_trusted(host, port, key):
+                        events.put(("log", "Gespeicherter SSH-Hostschlüssel stimmt überein."))
+                    else:
+                        key_decision = {"event": threading.Event(), "accepted": False}
+                        events.put(("host_key", host, fingerprint, key, key_decision))
+                        if not key_decision["event"].wait(300):
+                            raise RuntimeError("Die Bestätigung des SSH-Fingerabdrucks ist abgelaufen.")
+                        if not key_decision["accepted"]:
+                            raise RuntimeError("SSH-Verbindung vom Benutzer abgebrochen.")
+                        pi_deployment.trust_host_key(host, port, key)
+                    events.put(("log", "SSH-Schlüssel bestätigt. Starte sichere Übertragung …"))
+                    pi_deployment.deploy_bundle(
+                        host, port, username, ssh_password, sudo_password, archive,
+                        on_output=lambda line: events.put(("log", line)),
+                    )
+                    events.put(("done", f"Pi-Bereitstellung erfolgreich.\n\nOverlay: http://{host}:8765/\nLivechat: http://{host}:8765/livechat\nAlerts: http://{host}:8765/alerts\nStats: http://{host}:8765/stats"))
+                except Exception as ex:
+                    events.put(("error", str(ex)))
+                finally:
+                    if cleanup:
+                        cleanup()
+                    events.put(("finished",))
+
+            def poll_events():
+                try:
+                    while True:
+                        event = events.get_nowait()
+                        if event[0] == "log":
+                            append_log(event[1])
+                        elif event[0] == "host_key":
+                            _, remote_host, fingerprint, key, key_decision = event
+                            accepted = messagebox.askyesno(
+                                APP_NAME,
+                                "Beim ersten SSH-Kontakt kann dieser Schlüssel noch nicht "
+                                "mit einem gespeicherten Schlüssel verglichen werden. "
+                                "Vergleiche den Fingerabdruck nach Möglichkeit mit einer "
+                                "vertrauenswürdigen Quelle.\n\n"
+                                f"Pi: {remote_host}:{port}\n"
+                                f"Fingerabdruck: {fingerprint}\n\n"
+                                "Diesen SSH-Schlüssel für künftige Verbindungen speichern?",
+                            )
+                            key_decision["accepted"] = accepted
+                            key_decision["event"].set()
+                        elif event[0] == "done":
+                            decision["event"] = ("done", event[1])
+                        elif event[0] == "error":
+                            decision["event"] = ("error", event[1])
+                        elif event[0] == "finished":
+                            try:
+                                if start_button.winfo_exists():
+                                    start_button.configure(state="normal")
+                            except tk.TclError:
+                                pass
+                            if decision["event"]:
+                                kind, detail = decision["event"]
+                                if kind == "done":
+                                    append_log("Fertig.")
+                                    if stop_local_after_success and self.bridge_has_process():
+                                        self.stop_bridge()
+                                    self.update_status("Pi-Bridge bereitgestellt")
+                                    messagebox.showinfo(APP_NAME, detail)
+                                else:
+                                    append_log("FEHLER: " + detail)
+                                    self.update_status("Pi-Bereitstellung fehlgeschlagen")
+                                    messagebox.showerror(APP_NAME, "Pi-Bereitstellung fehlgeschlagen:\n\n" + detail)
+                            return
+                except queue.Empty:
+                    pass
+                self.after(100, poll_events)
+
+            threading.Thread(target=worker, daemon=True).start()
+            self.after(100, poll_events)
+
+        start_button.configure(command=start_deployment)
+        self.update_status("Raspberry Pi Bereitstellung")
 
     def show_bridge_page(self):
         self._show_manager_section(

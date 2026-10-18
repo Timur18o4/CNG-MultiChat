@@ -1,0 +1,4 @@
+requests==2.34.2
+websocket-client==1.9.2
+TikTokLive==7.0.1
+yt-dlp==2026.8.19
