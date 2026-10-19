@@ -43,8 +43,9 @@ No Firefox.
 No browser automation.
 
 CNG:
-  Uses the current username-based CNG chat API: 50-message history + polling.
-  No CNG creator ID or browser session cookie is required for chat.
+  Reads the broadcaster's current OBS chat and presence tokens from CNG.
+  Polls streamChat.getMessages with obsChatToken and sends presenceHeartbeat;
+  the authenticated session-based chat request remains as a fallback.
 
 Twitch:
   Uses Twitch IRC over secure WebSocket.
@@ -667,21 +668,122 @@ def cng_legacy_session_value(value):
     return raw
 
 
-def cng_url(creator_id):
+def cng_url(creator_id, obs_chat_token=None, after_id=None, limit=50):
+    chat_query = {"creatorId": creator_id, "limit": limit}
+    if after_id is not None:
+        chat_query["afterId"] = after_id
+    if obs_chat_token:
+        chat_query["obsChatToken"] = obs_chat_token
+
+    payload = {"0": {"json": chat_query}}
+    return (
+        f"{CNG_BASE_URL}/api/trpc/streamChat.getMessages?batch=1&input="
+        + quote(json.dumps(payload, separators=(",", ":")), safe="")
+    )
+
+
+def _cng_trpc_error_status(data):
+    """Extract only the HTTP-like status from a batched tRPC error."""
+    row = data[0] if isinstance(data, list) and data else data
+    if not isinstance(row, dict) or not isinstance(row.get("error"), dict):
+        return None
+    error = row["error"]
+    error_json = error.get("json") if isinstance(error.get("json"), dict) else error
+    metadata = error_json.get("data") if isinstance(error_json, dict) else None
+    if not isinstance(metadata, dict):
+        return None
+    status = metadata.get("httpStatus") or metadata.get("statusCode")
+    if status is None:
+        status = {"UNAUTHORIZED": 401, "FORBIDDEN": 403}.get(metadata.get("code"))
+    try:
+        return int(status) if status is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def cng_obs_chat_token_url():
+    """Return the dashboard tRPC query that reads the current OBS chat tokens."""
     payload = {
         "0": {
-            "json": {
-                "creatorId": creator_id,
-                "limit": 50
-            }
+            "json": None,
+            "meta": {"values": ["undefined"]},
         }
     }
-
     return (
-        "https://cng-plattform.com/api/trpc/"
-        "streamChat.getMessages?batch=1&input=" +
-        quote(json.dumps(payload, separators=(",", ":")), safe="")
+        f"{CNG_BASE_URL}/api/trpc/broadcaster.getObsChatToken?batch=1&input="
+        + quote(json.dumps(payload, separators=(",", ":")), safe="")
     )
+
+
+def cng_fetch_obs_chat_tokens(cookie, expected_creator_id):
+    """Read the current OBS chat and presence tokens without rotating them."""
+    headers = {
+        "Accept": "*/*",
+        "User-Agent": "Mozilla/5.0 CNG-Unified-Chat/8.0",
+        "Referer": f"{CNG_BASE_URL}/dashboard",
+        "Origin": CNG_BASE_URL,
+        "Cookie": cookie,
+    }
+    req = urllib.request.Request(cng_obs_chat_token_url(), headers=headers, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=15) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(f"OBS-Chat-Token HTTP {exc.code}") from None
+
+    try:
+        value = data[0]["result"]["data"] if isinstance(data, list) else data["result"]["data"]
+        if isinstance(value, dict) and "json" in value:
+            value = value["json"]
+    except (KeyError, IndexError, TypeError):
+        raise RuntimeError("CNG lieferte keine OBS-Chat-Token-Antwort.") from None
+
+    if not isinstance(value, dict):
+        raise RuntimeError("CNG lieferte eine ungültige OBS-Chat-Token-Antwort.")
+
+    try:
+        creator_id = int(value.get("creatorId"))
+    except (TypeError, ValueError):
+        raise RuntimeError("CNG-Tokenantwort enthält keine gültige Creator-ID.") from None
+    if creator_id != int(expected_creator_id):
+        raise RuntimeError("CNG-Tokenantwort gehört zu einer anderen Creator-ID.")
+
+    obs_chat_token = str(value.get("token") or "").strip()
+    presence_token = str(value.get("presenceToken") or "").strip()
+    if not obs_chat_token:
+        raise RuntimeError("CNG-Tokenantwort enthält keinen OBS-Chat-Token.")
+    return obs_chat_token, presence_token
+
+
+def cng_send_presence_heartbeat(creator_id, presence_token):
+    """Send the same presence mutation used by CNG's OBS chat popout."""
+    url = f"{CNG_BASE_URL}/api/trpc/streamChat.presenceHeartbeat?batch=1"
+    payload = {"0": {"json": {"presenceToken": presence_token}}}
+    response = requests.post(
+        url,
+        headers={
+            "Accept": "*/*",
+            "Content-Type": "application/json",
+            "Origin": CNG_BASE_URL,
+            "Referer": f"{CNG_BASE_URL}/chat-popout/{creator_id}?mode=obs",
+            "User-Agent": "Mozilla/5.0 CNG-Unified-Chat/8.0",
+        },
+        json=payload,
+        timeout=15,
+    )
+    if response.status_code >= 400:
+        error = RuntimeError(f"Presence-Heartbeat HTTP {response.status_code}")
+        error.status_code = response.status_code
+        raise error
+    try:
+        result = response.json()
+    except ValueError:
+        raise RuntimeError("Presence-Heartbeat lieferte eine ungültige Antwort.") from None
+    status = _cng_trpc_error_status(result)
+    if status is not None:
+        error = RuntimeError(f"Presence-Heartbeat HTTP {status}")
+        error.status_code = status
+        raise error
 
 
 def cng_alerts_url(creator_id):
@@ -846,26 +948,91 @@ def cng_status_loop(config):
         time.sleep(15.0)
 
 
-def cng_fetch(creator_id, session, cng_ref):
+def cng_fetch(
+    creator_id,
+    session,
+    cng_ref,
+    obs_chat_token=None,
+    after_id=None,
+    limit=50,
+    creator_cookie=None,
+):
     headers = {
         "Accept": "*/*",
         "User-Agent": "Mozilla/5.0 CNG-Unified-Chat/8.0",
         "Referer":
             f"https://cng-plattform.com/chat-popout/{creator_id}?mode=obs",
         "Origin": "https://cng-plattform.com",
-        "Cookie":
+    }
+    if not obs_chat_token:
+        headers["Cookie"] = creator_cookie or (
             f"cng_session={session}" +
             (f"; cng_ref={cng_ref}" if cng_ref else "")
-    }
+        )
 
     req = urllib.request.Request(
-        cng_url(creator_id),
+        cng_url(
+            creator_id,
+            obs_chat_token=obs_chat_token,
+            after_id=after_id,
+            limit=limit,
+        ),
         headers=headers,
         method="GET"
     )
 
-    with urllib.request.urlopen(req, timeout=10) as r:
-        return json.loads(r.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            data = json.loads(r.read().decode("utf-8"))
+            if obs_chat_token:
+                status = _cng_trpc_error_status(data)
+                if status is not None:
+                    error = RuntimeError(f"OBS-Chat-Abruf HTTP {status}")
+                    error.status_code = status
+                    raise error
+            return data
+    except urllib.error.HTTPError as exc:
+        if obs_chat_token:
+            # Never log an HTTPError directly here: its text includes the URL,
+            # and the signed OBS token is part of the query string.
+            error = RuntimeError(f"OBS-Chat-Abruf HTTP {exc.code}")
+            error.status_code = exc.code
+            raise error from None
+        raise
+    except urllib.error.URLError as exc:
+        if obs_chat_token:
+            raise RuntimeError(
+                f"OBS-Chat-Abruf Netzwerkfehler ({type(exc.reason).__name__})"
+            ) from None
+        raise
+
+
+def cng_presence_heartbeat_loop(creator_id, token_state):
+    """Keep the CNG presence alive independently of chat polling."""
+    logged_success = False
+    token_updated = token_state["token_updated"]
+    while True:
+        with token_state["lock"]:
+            token = token_state.get("presence_token") or token_state.get("obs_chat_token")
+
+        if not token:
+            token_updated.wait(15.0)
+            token_updated.clear()
+            continue
+
+        try:
+            cng_send_presence_heartbeat(creator_id, token)
+            if not logged_success:
+                print("[CNG PRESENCE] Heartbeat aktiv (60-Sekunden-Intervall).")
+                logged_success = True
+        except Exception as exc:
+            status = getattr(exc, "code", None)
+            if status in (401, 403) or "HTTP 401" in str(exc) or "HTTP 403" in str(exc):
+                token_state["refresh_requested"].set()
+            print("[CNG PRESENCE] Heartbeat-Fehler:", str(exc))
+
+        token_updated.wait(60.0)
+        token_updated.clear()
 
 
 def cng_extract(data):
@@ -2982,21 +3149,112 @@ def cng_loop(config):
 
     session = str(config.get("cng_session", "")).strip()
     cng_ref = str(config.get("cng_ref", "")).strip()
-
-    if not session or session.startswith("HIER_"):
+    try:
+        creator_cookie = cng_creator_cookie(config)
+    except Exception as exc:
+        print("[CNG] Deaktiviert: CNG Creator-Session fehlt.", str(exc))
+        return
+    session_value = cng_legacy_session_value(creator_cookie)
+    if not session_value or session_value.startswith("HIER_"):
         print("[CNG] Deaktiviert: cng_session fehlt.")
         return
 
+    token_state = {
+        "lock": threading.Lock(),
+        "obs_chat_token": None,
+        "presence_token": None,
+        "refresh_requested": threading.Event(),
+        "token_updated": threading.Event(),
+    }
+
+    def refresh_tokens():
+        try:
+            obs_chat_token, presence_token = cng_fetch_obs_chat_tokens(
+                creator_cookie,
+                creator,
+            )
+        except Exception as exc:
+            print("[CNG] OBS-Chat-Token nicht verfügbar:", str(exc))
+            return False
+
+        with token_state["lock"]:
+            token_state["obs_chat_token"] = obs_chat_token
+            token_state["presence_token"] = presence_token
+        token_state["token_updated"].set()
+        print("[CNG] OBS-Chat-Token aktiv; Nachrichten werden tokenbasiert abgerufen.")
+        return True
+
+    token_available = refresh_tokens()
+    next_token_retry = time.monotonic() + (3600.0 if token_available else 60.0)
+    threading.Thread(
+        target=cng_presence_heartbeat_loop,
+        args=(creator, token_state),
+        daemon=True,
+    ).start()
     print(f"[CNG] aktiv - creatorId={creator}")
 
     # The first CNG getMessages response is history, not live chat.
     # Seed the seen-set and NEVER publish that first batch.
     first = True
+    after_id = None
+    obs_api_retry_at = 0.0
+    obs_api_error_logged = False
 
     while True:
         try:
-            data = cng_fetch(creator, session, cng_ref)
+            now = time.monotonic()
+            if (
+                token_state["refresh_requested"].is_set()
+                or now >= next_token_retry
+            ):
+                token_state["refresh_requested"].clear()
+                if refresh_tokens():
+                    next_token_retry = now + 3600.0
+                    obs_api_retry_at = 0.0
+                    obs_api_error_logged = False
+                else:
+                    next_token_retry = now + 60.0
+
+            with token_state["lock"]:
+                obs_chat_token = token_state.get("obs_chat_token")
+
+            use_obs_api = bool(obs_chat_token) and now >= obs_api_retry_at
+            if use_obs_api:
+                try:
+                    data = cng_fetch(
+                        creator,
+                        session,
+                        cng_ref,
+                        obs_chat_token=obs_chat_token,
+                        after_id=after_id,
+                        limit=20 if after_id is not None else 50,
+                    )
+                    obs_api_error_logged = False
+                except Exception as exc:
+                    status = getattr(exc, "status_code", None) or getattr(exc, "code", None)
+                    if status in (401, 403):
+                        token_state["refresh_requested"].set()
+                    obs_api_retry_at = now + 30.0
+                    if not obs_api_error_logged:
+                        print("[CNG] OBS-Chat-Token-Abruf fehlgeschlagen; verwende Session-Fallback:", str(exc))
+                        obs_api_error_logged = True
+                    data = cng_fetch(
+                        creator,
+                        session,
+                        cng_ref,
+                        creator_cookie=creator_cookie,
+                    )
+            else:
+                data = cng_fetch(
+                    creator,
+                    session,
+                    cng_ref,
+                    creator_cookie=creator_cookie,
+                )
+
             messages = cng_extract(data)
+            if use_obs_api and messages and messages[-1].get("id") is not None:
+                after_id = messages[-1]["id"]
 
             new = []
 
@@ -3043,7 +3301,7 @@ def cng_loop(config):
         except Exception as e:
             print("[CNG] Fehler:", repr(e))
 
-        time.sleep(1.5)
+        time.sleep(CNG_CHAT_POLL_SECONDS)
 
 
 # ============================================================
@@ -7925,7 +8183,7 @@ def main():
     else:
         print("OBS WebSocket: AUS")
 
-    # CNG CHAT: legacy streamChat.getMessages tRPC polling.
+    # CNG CHAT: OBS-token streamChat.getMessages polling with session fallback.
     # CNG alerts/followers/status below use the same legacy platform API.
     threading.Thread(
         target=cng_loop,

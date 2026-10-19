@@ -1,5 +1,14 @@
 # Änderungen
 
+## v1.0.5 — 19.10.2026
+
+### CNG-Chat
+
+- Chatnachrichten werden bevorzugt über den aktuellen OBS-Chat-Token der CNG-Sitzung abgerufen.
+- Die Bridge hält die CNG-Anwesenheit mit einem separaten Heartbeat aufrecht und erneuert die OBS-Token regelmäßig sowie nach Authentifizierungsfehlern.
+- Wenn der tokenbasierte Abruf vorübergehend fehlschlägt, verwendet die Bridge weiterhin den bestehenden authentifizierten Session-Abruf als Rückfallweg.
+- Tokenwerte werden in den neuen CNG-Fehlermeldungen nicht protokolliert.
+
 ## v1.0.4 — 19.10.2026
 
 ### Windows-Manager
