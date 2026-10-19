@@ -13,6 +13,7 @@ import sys
 import tempfile
 import threading
 import time
+from datetime import datetime
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import urllib.error
@@ -20,6 +21,12 @@ import urllib.parse
 import urllib.request
 import uuid
 import webbrowser
+from update_service import (
+    download_and_stage,
+    latest_update,
+    read_app_version,
+    start_external_updater,
+)
 
 APP_NAME = "CNG MultiChat Manager "
 BASE_DIR = os.path.dirname(os.path.abspath(sys.executable if getattr(sys, "frozen", False) else __file__))
@@ -32,6 +39,10 @@ COMMAND_BOT_CONFIG_FILE = os.path.join(BASE_DIR, "command_bot.json")
 ALERT_CONFIG_FILE = os.path.join(BASE_DIR, "alert_settings.json")
 OBS_CONFIG_FILE = os.path.join(BASE_DIR, "obs_settings.json")
 APP_SETTINGS_FILE = os.path.join(BASE_DIR, "manager_settings.json")
+try:
+    APP_VERSION = read_app_version(BASE_DIR)
+except Exception:
+    APP_VERSION = "0.0.0"
 
 ALERT_EVENT_DEFAULTS = {
     "follow": {
@@ -667,7 +678,10 @@ class Manager(tk.Tk):
         self.bridge_log_text = None
         self.bridge_log_offset = 0
         self.bridge_log_decoder = codecs.getincrementaldecoder("utf-8")("replace")
+        self.bridge_log_partial_line = ""
         self.bridge_log_follow = None
+        self.update_status_var = tk.StringVar(master=self, value="Updateprüfung folgt beim Start.")
+        self._update_check_lock = threading.Lock()
         self.display_settings = self.load_display_settings()
         self.app_settings = self.load_app_settings()
         self.alert_settings = self.load_alert_settings()
@@ -2048,6 +2062,9 @@ class Manager(tk.Tk):
         self.sidebar_bridge_status = tk.StringVar(value="Bereit")
         tk.Label(sb, textvariable=self.sidebar_bridge_status, bg="#0d0414",
                  fg=self.colors["green"], font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(4, 0))
+        self.sidebar_app_version = tk.StringVar(value=f"Version {APP_VERSION}")
+        tk.Label(sb, textvariable=self.sidebar_app_version, bg="#0d0414",
+                 fg="#9c8da7", font=("Segoe UI", 8)).pack(anchor="w", pady=(6, 0))
 
         # Main area
         main = tk.Frame(outer, bg=self.colors["bg"])
@@ -2288,6 +2305,84 @@ class Manager(tk.Tk):
             self.account_list.see(selected_index)
             self.on_select()
 
+    def start_update_check(self, manual=False):
+        if not getattr(sys, "frozen", False):
+            self.update_status_var.set("Automatische Updates stehen im fertigen Windows-Paket zur Verfügung.")
+            return
+        if not self._update_check_lock.acquire(blocking=False):
+            self.update_status_var.set("Die Updateprüfung läuft bereits.")
+            return
+
+        self.update_status_var.set("Suche nach einer neueren stabilen Version …")
+        button = getattr(self, "update_check_button", None)
+        if button is not None:
+            button.configure(state="disabled")
+
+        def set_status(message):
+            if self.quitting:
+                return
+            try:
+                self.after(0, lambda message=message: self.update_status_var.set(message))
+            except tk.TclError:
+                pass
+
+        def worker():
+            stage_directory = None
+            try:
+                update = latest_update(APP_VERSION)
+                if update is None:
+                    set_status(f"Du verwendest die aktuelle Version {APP_VERSION}.")
+                    return
+                set_status(
+                    f"Version {update['version']} gefunden. Prüfe Herausgebersignatur und lade das Paket …"
+                )
+                stage_directory = download_and_stage(update, BASE_DIR)
+                self.after(
+                    0,
+                    lambda stage=stage_directory, version=update["version"]:
+                    self._launch_verified_update(stage, version),
+                )
+                stage_directory = None
+            except Exception as ex:
+                set_status(f"Update nicht installiert; der Manager läuft weiter. {ex}")
+            finally:
+                if stage_directory:
+                    shutil.rmtree(stage_directory, ignore_errors=True)
+                self._update_check_lock.release()
+
+                def restore_button():
+                    button = getattr(self, "update_check_button", None)
+                    if button is None:
+                        return
+                    try:
+                        if button.winfo_exists():
+                            button.configure(state="normal")
+                    except tk.TclError:
+                        pass
+
+                try:
+                    self.after(0, restore_button)
+                except tk.TclError:
+                    pass
+
+        threading.Thread(target=worker, name="CNGUpdateCheck", daemon=True).start()
+
+    def _launch_verified_update(self, stage_directory, version):
+        if self.quitting:
+            shutil.rmtree(stage_directory, ignore_errors=True)
+            return
+        self.update_status_var.set(f"Version {version} ist bereit. Der Manager wird aktualisiert und neu gestartet …")
+        try:
+            bridge_pid = None
+            if hasattr(self, "bridge") and self.bridge.process is not None:
+                bridge_pid = self.bridge.process.pid
+            start_external_updater(stage_directory, BASE_DIR, os.getpid(), bridge_pid)
+        except Exception as ex:
+            shutil.rmtree(stage_directory, ignore_errors=True)
+            self.update_status_var.set(f"Update konnte nicht gestartet werden: {ex}")
+            return
+        self.quit_application()
+
     def show_about(self):
         self._show_manager_section(
             "Über CNG MultiChat",
@@ -2330,6 +2425,38 @@ class Manager(tk.Tk):
         gradient = tk.Canvas(hero, bg=self.colors["panel2"], height=4, highlightthickness=0)
         gradient.pack(fill="x", side="bottom")
         gradient.bind("<Configure>", lambda event: self.draw_cng_gradient(gradient))
+
+        update_card = tk.Frame(
+            self.form,
+            bg=self.colors["panel2"],
+            highlightbackground=self.colors["border"],
+            highlightthickness=1,
+        )
+        update_card.pack(fill="x", pady=(0, 18))
+        update_content = tk.Frame(update_card, bg=self.colors["panel2"])
+        update_content.pack(fill="x", padx=18, pady=14)
+        tk.Label(
+            update_content,
+            text=f"Programmversion {APP_VERSION}",
+            bg=self.colors["panel2"],
+            fg="#ffffff",
+            font=("Segoe UI", 11, "bold"),
+        ).pack(anchor="w")
+        tk.Label(
+            update_content,
+            textvariable=self.update_status_var,
+            bg=self.colors["panel2"],
+            fg=self.colors["muted"],
+            font=("Segoe UI", 9),
+            justify="left",
+            wraplength=620,
+        ).pack(anchor="w", pady=(5, 10))
+        self.update_check_button = ttk.Button(
+            update_content,
+            text="Jetzt nach Updates suchen",
+            command=lambda: self.start_update_check(manual=True),
+        )
+        self.update_check_button.pack(anchor="w")
 
         ttk.Label(self.form, text="Kanäle & Profile", style="Header.TLabel").pack(
             anchor="w", pady=(0, 4)
@@ -3112,6 +3239,7 @@ class Manager(tk.Tk):
         window.configure(bg=self.colors["bg"])
         self.bridge_log_window = window
         self.bridge_log_decoder = codecs.getincrementaldecoder("utf-8")("replace")
+        self.bridge_log_partial_line = ""
 
         toolbar = tk.Frame(window, bg=self.colors["panel"])
         toolbar.pack(fill="x", padx=12, pady=(12, 6))
@@ -3186,13 +3314,30 @@ class Manager(tk.Tk):
         except OSError:
             self.bridge_log_offset = 0
         self.bridge_log_decoder = codecs.getincrementaldecoder("utf-8")("replace")
+        self.bridge_log_partial_line = ""
 
-    def _append_bridge_log(self, text):
+    def _append_bridge_log(self, text, flush=False):
         widget = self.bridge_log_text
-        if widget is None or not text:
+        if widget is None:
+            return
+        combined = self.bridge_log_partial_line + (text or "")
+        self.bridge_log_partial_line = ""
+        lines = combined.splitlines(keepends=True)
+        formatted_lines = []
+        for line in lines:
+            if line.endswith(("\n", "\r")):
+                formatted_lines.append(f"[{datetime.now().strftime('%H:%M:%S')}] {line}")
+            else:
+                self.bridge_log_partial_line += line
+        if flush and self.bridge_log_partial_line:
+            formatted_lines.append(
+                f"[{datetime.now().strftime('%H:%M:%S')}] {self.bridge_log_partial_line}\n"
+            )
+            self.bridge_log_partial_line = ""
+        if not formatted_lines:
             return
         widget.configure(state="normal")
-        widget.insert("end", text)
+        widget.insert("end", "".join(formatted_lines))
         line_count = int(widget.index("end-1c").split(".")[0])
         if line_count > 5000:
             widget.delete("1.0", f"{line_count - 5000}.0")
@@ -3213,6 +3358,7 @@ class Manager(tk.Tk):
                 # The log was truncated or replaced while the viewer was open.
                 self.bridge_log_offset = 0
                 self.bridge_log_decoder = codecs.getincrementaldecoder("utf-8")("replace")
+                self.bridge_log_partial_line = ""
                 if self.bridge_log_text is not None:
                     self.bridge_log_text.configure(state="normal")
                     self.bridge_log_text.delete("1.0", "end")
@@ -3230,6 +3376,7 @@ class Manager(tk.Tk):
                 status = f"Bridge läuft · PID {process.pid}"
             else:
                 status = "Bridge ist beendet"
+                self._append_bridge_log("", flush=True)
             if self.bridge_log_state is not None:
                 self.bridge_log_state.set(f"{status}  ·  {log_path}")
         except FileNotFoundError:
@@ -3476,6 +3623,8 @@ def main():
 
     app.update_bridge_buttons()
     app.after(1000,app.start_bridge)
+    if getattr(sys, "frozen", False):
+        app.after(5000, app.start_update_check)
     app.mainloop()
 
 

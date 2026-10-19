@@ -1,5 +1,16 @@
 # Änderungen
 
+## v1.0.4 — 19.10.2026
+
+### Windows-Manager
+
+- Der Manager zeigt seine Version an und prüft beim Start im Hintergrund auf eine neuere stabile GitHub-Version.
+- Ein Update wird nur aus dem offiziellen `CNG-MultiChat`-Release geladen und vor dem Entpacken anhand der GitHub-SHA-256-Prüfsumme sowie einer fest eingebauten Ed25519-Herausgebersignatur geprüft.
+- Der Manager beendet für den Austausch die Bridge und startet danach neu. Bei einem fehlgeschlagenen Start wird die vorherige Programmversion wiederhergestellt.
+- Konten, Zugangsdaten, Einstellungen und lokale Dateien bleiben beim Austausch erhalten. Bei fehlender Internetverbindung läuft die installierte Version weiter.
+- Das Buildkit erstellt ein versioniertes Windows-ZIP und eine passende `.sig.json`-Signaturdatei, die gemeinsam im GitHub-Release liegen müssen.
+- Jede Zeile der Manager-Live-Log-Ansicht erhält eine lokale Uhrzeit.
+
 ## v1.0.3 — 19.10.2026
 
 ### Raspberry-Pi-Bereitstellung
