@@ -1,5 +1,15 @@
 # Änderungen
 
+## v1.0.6 — 20.10.2026
+
+### Chat-Anzeige
+
+- Schriftgröße, Nachrichtenfarbe und Namensfarben lassen sich im Manager einstellen.
+- Die bisherige stabile automatische Namensfarbe bleibt erhalten; zusätzlich gibt es eine eigene Farbpalette, plattformbezogene Farben und eine Einzelfarbe für alle Namen.
+- Für einzelne Benutzernamen können plattformübergreifende Farb-Ausnahmen gespeichert werden. Sie haben Vorrang vor dem ausgewählten Namensfarben-Modus.
+- Livechat-Dock sowie vertikale und horizontale OBS-Chat-Overlays übernehmen die Einstellungen automatisch.
+- Die Benutzeranleitung wurde um die neuen Chat-Darstellungsoptionen ergänzt.
+
 ## v1.0.5 — 19.10.2026
 
 ### CNG-Chat

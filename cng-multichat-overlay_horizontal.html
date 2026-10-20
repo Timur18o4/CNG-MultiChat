@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>CNG MultiChat Overlay</title>
 <style>
-:root{--panel:rgba(8,9,13,.82);--border:rgba(255,255,255,.10);--text:#f5f5f7;--kick:#53e000;--twitch:#9147ff;--tiktok:#25f4ee;--cng:#ff8a00;--youtube:#ff0000}
+:root{--panel:rgba(8,9,13,.82);--border:rgba(255,255,255,.10);--text:#f5f5f7;--kick:#53e000;--twitch:#9147ff;--tiktok:#25f4ee;--cng:#ff8a00;--youtube:#ff0000;--chat-font-size:14px;--message-text-color:#f5f5f7}
 *{box-sizing:border-box}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}
 body{font-family:Inter,Segoe UI,Arial,sans-serif;color:var(--text);padding:16px;display:flex;flex-direction:column;gap:6px}
@@ -20,15 +20,15 @@ body{font-family:Inter,Segoe UI,Arial,sans-serif;color:var(--text);padding:16px;
 .content{min-width:0;max-width:none;background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--platform);border-radius:8px;padding:5px 9px;white-space:nowrap}
 .head{display:flex;align-items:center;gap:7px;line-height:1.1;margin-bottom:3px}
 .platform{font-size:10px;font-weight:800;letter-spacing:.7px;color:var(--platform)}
-.name{font-size:13px;font-weight:750;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.name{font-size:calc(var(--chat-font-size)*.93);font-weight:750;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .badges{display:flex;gap:3px;flex-wrap:wrap}
 .badge{font-size:9px;padding:2px 4px;border-radius:4px;background:rgba(255,255,255,.12);color:#ddd}
-.text{font-size:14px;line-height:1.2;white-space:nowrap;overflow:visible}
-.chat-emote{height:28px;width:auto;max-width:96px;vertical-align:middle;object-fit:contain;margin:0 1px}
-.twitch .chat-emote{height:28px}
-.kick .chat-emote{height:28px}
-.cng-emote{height:28px}
-.tiktok-emote{height:28px}
+.text{font-size:var(--chat-font-size);line-height:1.2;color:var(--message-text-color);white-space:nowrap;overflow:visible}
+.chat-emote{height:calc(var(--chat-font-size)*2);width:auto;max-width:96px;vertical-align:middle;object-fit:contain;margin:0 1px}
+.twitch .chat-emote{height:calc(var(--chat-font-size)*2)}
+.kick .chat-emote{height:calc(var(--chat-font-size)*2)}
+.cng-emote{height:calc(var(--chat-font-size)*2)}
+.tiktok-emote{height:calc(var(--chat-font-size)*2)}
 @keyframes in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 @keyframes out{from{opacity:1;transform:translateY(0);max-height:300px}
                 to{opacity:0;transform:translateY(-4px);max-height:0;margin-top:-8px}}
@@ -66,16 +66,18 @@ body{font-family:Inter,Segoe UI,Arial,sans-serif;color:var(--text);padding:16px;
   display:inline-block;
   margin:0 12px;
   color:rgba(255,255,255,.65);
-  font-size:14px;
+  font-size:var(--chat-font-size);
   font-weight:700;
 }
 .chain-user{
+  font-size:calc(var(--chat-font-size)*.93);
   font-weight:800;
   color:#fff;
 }
 .chain-text{
   margin-left:4px;
-  color:#fff;
+  color:var(--message-text-color);
+  font-size:var(--chat-font-size);
 }
 
 #chat::before{
@@ -235,8 +237,51 @@ const CONFIG={
 const chat=document.getElementById("chat");
 const DISPLAY_CONFIG={
   autoHideMessages:true,
-  messageLifetimeSeconds:10
+  messageLifetimeSeconds:10,
+  chatFontSize:14,
+  nameColorMode:"auto",
+  fixedNameColor:"#ffffff",
+  nameColorPalette:["#ff6b6b","#4dabf7","#51cf66","#ffd43b","#cc5de8","#20c997","#ff922b","#f06595"],
+  platformNameColors:{twitch:"#9147ff",kick:"#53e000",cng:"#ff8a00",tiktok:"#25f4ee",youtube:"#ff0000"},
+  userNameColors:{},
+  messageTextColor:"#f5f5f7"
 };
+
+function normalizedColor(value,fallback){
+  const color=String(value||"").trim();
+  return /^#[0-9a-f]{6}$/i.test(color)?color.toLowerCase():fallback;
+}
+
+function stableNameHash(name){
+  const key=String(name??"").trim().toLowerCase();
+  let hash=0;
+  for(let i=0;i<key.length;i++) hash=((hash<<5)-hash)+key.charCodeAt(i)|0;
+  return {key,hash};
+}
+
+function resolveNameColor(name,platform){
+  const {key,hash}=stableNameHash(name);
+  if(!key) return "#ffffff";
+  if(DISPLAY_CONFIG.userNameColors[key]) return DISPLAY_CONFIG.userNameColors[key];
+  switch(DISPLAY_CONFIG.nameColorMode){
+    case "palette":
+      return DISPLAY_CONFIG.nameColorPalette[Math.abs(hash)%DISPLAY_CONFIG.nameColorPalette.length]||"#ffffff";
+    case "platform":
+      return DISPLAY_CONFIG.platformNameColors[platform]||"#ffffff";
+    case "fixed":
+      return DISPLAY_CONFIG.fixedNameColor;
+    default:{
+      const hue=Math.abs(hash)%360;
+      return `hsl(${hue} 68% 68%)`;
+    }
+  }
+}
+
+function recolorExistingNames(){
+  document.querySelectorAll(".chain-user[data-username]").forEach(element=>{
+    element.style.color=resolveNameColor(element.dataset.username,element.dataset.platform);
+  });
+}
 
 async function loadDisplayConfig(){
   try{
@@ -265,6 +310,30 @@ async function loadDisplayConfig(){
         Math.min(300,seconds)
       );
     }
+
+    const fontSize=Number(data.chat_font_size);
+    if(Number.isFinite(fontSize)){
+      DISPLAY_CONFIG.chatFontSize=Math.max(8,Math.min(32,fontSize));
+      document.documentElement.style.setProperty("--chat-font-size",DISPLAY_CONFIG.chatFontSize+"px");
+    }
+    const allowedColorModes=["auto","palette","platform","fixed"];
+    const colorMode=String(data.name_color_mode||"auto").toLowerCase();
+    DISPLAY_CONFIG.nameColorMode=allowedColorModes.includes(colorMode)?colorMode:"auto";
+    DISPLAY_CONFIG.fixedNameColor=normalizedColor(data.fixed_name_color,"#ffffff");
+    const palette=Array.isArray(data.name_color_palette)?data.name_color_palette.map(color=>normalizedColor(color,"")).filter(Boolean):[];
+    DISPLAY_CONFIG.nameColorPalette=palette.length?palette:["#ff6b6b","#4dabf7","#51cf66","#ffd43b","#cc5de8","#20c997","#ff922b","#f06595"];
+    const platformDefaults={twitch:"#9147ff",kick:"#53e000",cng:"#ff8a00",tiktok:"#25f4ee",youtube:"#ff0000"};
+    const platformColors=data.platform_name_colors&&typeof data.platform_name_colors==="object"?data.platform_name_colors:{};
+    DISPLAY_CONFIG.platformNameColors=Object.fromEntries(Object.entries(platformDefaults).map(([platform,color])=>[platform,normalizedColor(platformColors[platform],color)]));
+    const rawUserColors=data.user_name_colors&&typeof data.user_name_colors==="object"?data.user_name_colors:{};
+    DISPLAY_CONFIG.userNameColors={};
+    Object.entries(rawUserColors).forEach(([name,color])=>{
+      const key=String(name||"").trim().toLowerCase(),valid=normalizedColor(color,"");
+      if(key&&valid) DISPLAY_CONFIG.userNameColors[key]=valid;
+    });
+    DISPLAY_CONFIG.messageTextColor=normalizedColor(data.message_text_color,"#f5f5f7");
+    document.documentElement.style.setProperty("--message-text-color",DISPLAY_CONFIG.messageTextColor);
+    recolorExistingNames();
 
     console.log(
       "[CNG MultiChat] Auto-Hide:",
@@ -656,7 +725,8 @@ function processMessageQueue(){
   item.dataset.platform=p;
 
   const platformName=pname(p);
-  const username=esc(d.username||"Unbekannt");
+  const rawUsername=String(d.username||"Unbekannt");
+  const username=esc(rawUsername);
   const message=renderMessage(d);
 
   item.innerHTML=`
@@ -674,6 +744,12 @@ function processMessageQueue(){
     system:"#ffffff"
   };
   item.style.setProperty("--platform-color",platformColors[p]||"#ffffff");
+  const nameElement=item.querySelector(".chain-user");
+  if(nameElement){
+    nameElement.dataset.username=rawUsername;
+    nameElement.dataset.platform=p;
+    nameElement.style.color=resolveNameColor(rawUsername,p);
+  }
 
   const oldItems=row.querySelectorAll(".chain-item");
   if(oldItems.length){

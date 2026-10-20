@@ -390,22 +390,42 @@ def load_display_config():
     defaults = {
         "auto_hide_messages": True,
         "message_lifetime_seconds": 10,
-        "chat_layout": "classic"
+        "chat_layout": "classic",
+        "chat_font_size": 14,
+        "name_color_mode": "auto",
+        "fixed_name_color": "#ffffff",
+        "name_color_palette": [
+            "#ff6b6b", "#4dabf7", "#51cf66", "#ffd43b",
+            "#cc5de8", "#20c997", "#ff922b", "#f06595",
+        ],
+        "platform_name_colors": {
+            "twitch": "#9147ff",
+            "kick": "#53e000",
+            "cng": "#ff8a00",
+            "tiktok": "#25f4ee",
+            "youtube": "#ff0000",
+        },
+        "user_name_colors": {},
+        "message_text_color": "#f5f5f7",
     }
 
-    try:
-        with open(DISPLAY_CONFIG_FILE, encoding="utf-8") as f:
-            data = json.load(f)
+    def valid_color(value, fallback):
+        value = str(value or "").strip()
+        return value.lower() if re.fullmatch(r"#[0-9a-fA-F]{6}", value) else fallback
 
-        if not isinstance(data, dict):
-            raise ValueError("Display-Konfiguration muss ein JSON-Objekt sein.")
+    def normalize_user_colors(value):
+        if not isinstance(value, dict):
+            return {}
+        result = {}
+        for username, color in value.items():
+            key = str(username or "").strip().lower()
+            normalized = valid_color(color, "")
+            if key and normalized:
+                result[key] = normalized
+        return result
 
-        raw_auto_hide = data.get(
-            "auto_hide_messages",
-            defaults["auto_hide_messages"]
-        )
-
-        # Accept real JSON booleans as well as the strings "true"/"false".
+    def normalize_config(data):
+        raw_auto_hide = data.get("auto_hide_messages", defaults["auto_hide_messages"])
         if isinstance(raw_auto_hide, bool):
             auto_hide = raw_auto_hide
         elif isinstance(raw_auto_hide, str):
@@ -414,27 +434,65 @@ def load_display_config():
             auto_hide = bool(raw_auto_hide)
 
         try:
-            seconds = int(data.get(
-                "message_lifetime_seconds",
-                defaults["message_lifetime_seconds"]
-            ))
+            seconds = int(data.get("message_lifetime_seconds", defaults["message_lifetime_seconds"]))
         except (TypeError, ValueError):
             seconds = defaults["message_lifetime_seconds"]
+
+        try:
+            font_size = int(data.get("chat_font_size", defaults["chat_font_size"]))
+        except (TypeError, ValueError):
+            font_size = defaults["chat_font_size"]
 
         chat_layout = str(data.get("chat_layout", defaults["chat_layout"])).strip().lower()
         allowed_layouts = {"classic", "minimal", "bubble", "compact", "neon", "fancy"}
         if chat_layout not in allowed_layouts:
             chat_layout = defaults["chat_layout"]
 
+        color_mode = str(data.get("name_color_mode", defaults["name_color_mode"])).strip().lower()
+        if color_mode not in {"auto", "palette", "platform", "fixed"}:
+            color_mode = defaults["name_color_mode"]
+
+        palette = data.get("name_color_palette", defaults["name_color_palette"])
+        if isinstance(palette, list):
+            palette = [valid_color(color, "") for color in palette]
+            palette = [color for color in palette if color][:32]
+        else:
+            palette = []
+        if not palette:
+            palette = list(defaults["name_color_palette"])
+
+        platform_colors = dict(defaults["platform_name_colors"])
+        raw_platform_colors = data.get("platform_name_colors")
+        if isinstance(raw_platform_colors, dict):
+            for platform in platform_colors:
+                platform_colors[platform] = valid_color(
+                    raw_platform_colors.get(platform), platform_colors[platform]
+                )
+
         return {
             "auto_hide_messages": auto_hide,
             "message_lifetime_seconds": max(1, min(300, seconds)),
-            "chat_layout": chat_layout
+            "chat_layout": chat_layout,
+            "chat_font_size": max(8, min(32, font_size)),
+            "name_color_mode": color_mode,
+            "fixed_name_color": valid_color(data.get("fixed_name_color"), defaults["fixed_name_color"]),
+            "name_color_palette": palette,
+            "platform_name_colors": platform_colors,
+            "user_name_colors": normalize_user_colors(data.get("user_name_colors")),
+            "message_text_color": valid_color(data.get("message_text_color"), defaults["message_text_color"]),
         }
+
+    try:
+        with open(DISPLAY_CONFIG_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+
+        if not isinstance(data, dict):
+            raise ValueError("Display-Konfiguration muss ein JSON-Objekt sein.")
+        return normalize_config(data)
 
     except (OSError, ValueError, json.JSONDecodeError) as e:
         print("[DISPLAY CONFIG] Konnte display_settings.json nicht laden:", repr(e))
-        return defaults
+        return normalize_config(defaults)
 
 
 def publish(message):

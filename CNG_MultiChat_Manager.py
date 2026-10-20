@@ -15,7 +15,7 @@ import threading
 import time
 from datetime import datetime
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import ttk, messagebox, filedialog, colorchooser
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -104,7 +104,44 @@ DISPLAY_DEFAULTS = {
     "auto_hide_messages": False,
     "message_lifetime_seconds": 30,
     "chat_layout": "classic",
+    "chat_font_size": 14,
+    "name_color_mode": "auto",
+    "fixed_name_color": "#ffffff",
+    "name_color_palette": [
+        "#ff6b6b", "#4dabf7", "#51cf66", "#ffd43b",
+        "#cc5de8", "#20c997", "#ff922b", "#f06595",
+    ],
+    "platform_name_colors": {
+        "twitch": "#9147ff",
+        "kick": "#53e000",
+        "cng": "#ff8a00",
+        "tiktok": "#25f4ee",
+        "youtube": "#ff0000",
+    },
+    "user_name_colors": {},
+    "message_text_color": "#f5f5f7",
 }
+
+DISPLAY_PLATFORMS = ("twitch", "kick", "cng", "tiktok", "youtube")
+DISPLAY_COLOR_MODES = ("auto", "palette", "platform", "fixed")
+
+
+def normalize_display_color(value, fallback):
+    value = str(value or "").strip()
+    return value.lower() if re.fullmatch(r"#[0-9a-fA-F]{6}", value) else fallback
+
+
+def normalize_display_color_map(value):
+    if not isinstance(value, dict):
+        return {}
+    colors = {}
+    for username, color in value.items():
+        key = str(username or "").strip().lower()
+        if key:
+            normalized = normalize_display_color(color, "")
+            if normalized:
+                colors[key] = normalized
+    return colors
 
 APP_DEFAULTS = {
     "start_with_windows": False,
@@ -777,7 +814,7 @@ class Manager(tk.Tk):
             raise
 
     def load_display_settings(self):
-        settings = dict(DISPLAY_DEFAULTS)
+        settings = json.loads(json.dumps(DISPLAY_DEFAULTS))
         try:
             path = os.path.join(BASE_DIR, "display_settings.json")
             if os.path.exists(path):
@@ -794,6 +831,36 @@ class Manager(tk.Tk):
                     settings["message_lifetime_seconds"] = max(1, min(300, seconds))
                     style = str(data.get("chat_layout", data.get("chat_style", "classic"))).strip().lower()
                     settings["chat_layout"] = style if style in CHAT_STYLE_DEFS else "classic"
+                    try:
+                        font_size = int(data.get("chat_font_size", DISPLAY_DEFAULTS["chat_font_size"]))
+                    except (TypeError, ValueError):
+                        font_size = DISPLAY_DEFAULTS["chat_font_size"]
+                    settings["chat_font_size"] = max(8, min(32, font_size))
+                    color_mode = str(data.get("name_color_mode", "auto")).strip().lower()
+                    settings["name_color_mode"] = color_mode if color_mode in DISPLAY_COLOR_MODES else "auto"
+                    settings["fixed_name_color"] = normalize_display_color(
+                        data.get("fixed_name_color"), DISPLAY_DEFAULTS["fixed_name_color"]
+                    )
+                    palette = data.get("name_color_palette")
+                    if isinstance(palette, list):
+                        cleaned_palette = [
+                            normalize_display_color(color, "") for color in palette
+                        ]
+                        cleaned_palette = [color for color in cleaned_palette if color][:32]
+                        settings["name_color_palette"] = cleaned_palette or list(DISPLAY_DEFAULTS["name_color_palette"])
+                    platform_colors = data.get("platform_name_colors")
+                    if isinstance(platform_colors, dict):
+                        for platform in DISPLAY_PLATFORMS:
+                            settings["platform_name_colors"][platform] = normalize_display_color(
+                                platform_colors.get(platform),
+                                DISPLAY_DEFAULTS["platform_name_colors"][platform],
+                            )
+                    settings["user_name_colors"] = normalize_display_color_map(
+                        data.get("user_name_colors")
+                    )
+                    settings["message_text_color"] = normalize_display_color(
+                        data.get("message_text_color"), DISPLAY_DEFAULTS["message_text_color"]
+                    )
         except Exception:
             pass
         return settings
@@ -1373,6 +1440,226 @@ class Manager(tk.Tk):
             row=6, column=0, sticky="w", pady=(10, 0)
         )
 
+        color_box = ttk.LabelFrame(self.form, text="Chat-Schrift und Farben", padding=14)
+        color_box.pack(fill="x", pady=(0, 14))
+        color_box.columnconfigure(1, weight=1)
+
+        font_size_var = tk.IntVar(value=self.display_settings.get("chat_font_size", 14))
+        ttk.Label(color_box, text="Schriftgröße (OBS-Text)").grid(row=0, column=0, sticky="w", padx=(0, 12))
+        font_size_spin = tk.Spinbox(
+            color_box, from_=8, to=32, increment=1, textvariable=font_size_var, width=7,
+            bg="#0f0615", fg="#fff", insertbackground="#fff", buttonbackground="#29113a",
+            relief="flat", highlightthickness=1, highlightbackground=self.colors["border"],
+            highlightcolor=self.colors["orange"], justify="right"
+        )
+        font_size_spin.grid(row=0, column=1, sticky="w")
+        ttk.Label(color_box, text="px (Livechat proportional; Dock A−/A+ bleibt)").grid(row=0, column=2, sticky="w", padx=(8, 0))
+
+        color_mode_labels = {
+            "auto": "Automatisch wie bisher",
+            "palette": "Eigene Palette, stabil je Benutzer",
+            "platform": "Feste Farbe je Plattform",
+            "fixed": "Eine feste Farbe für alle Namen",
+        }
+        color_mode_reverse = {label: value for value, label in color_mode_labels.items()}
+        color_mode_var = tk.StringVar(
+            value=color_mode_labels.get(self.display_settings.get("name_color_mode", "auto"), color_mode_labels["auto"])
+        )
+        ttk.Label(color_box, text="Namensfarben").grid(row=1, column=0, sticky="w", padx=(0, 12), pady=(10, 0))
+        ttk.Combobox(
+            color_box, textvariable=color_mode_var, values=list(color_mode_labels.values()),
+            state="readonly", width=38
+        ).grid(row=1, column=1, columnspan=2, sticky="w", pady=(10, 0))
+        ttk.Label(
+            color_box,
+            text="Feste Benutzerfarben gelten immer zuerst. Die automatische Einstellung behält die bisherige, stabile Namensfarbe bei.",
+            style="Sub.TLabel", wraplength=760,
+        ).grid(row=2, column=0, columnspan=3, sticky="w", pady=(6, 12))
+
+        def make_color_picker(parent, variable, row, column, fallback="#ffffff"):
+            button = tk.Button(
+                parent, text="Farbe wählen", command=lambda: choose_color(variable, button),
+                bg=normalize_display_color(variable.get(), fallback), fg="#ffffff",
+                activebackground=self.colors["orange"], activeforeground="#ffffff",
+                relief="flat", padx=10, pady=3,
+            )
+            button.grid(row=row, column=column, sticky="w", padx=(8, 0))
+            return button
+
+        def choose_color(variable, button):
+            selected = colorchooser.askcolor(
+                color=normalize_display_color(variable.get(), "#ffffff"),
+                parent=self,
+                title="Farbe auswählen",
+            )[1]
+            if selected:
+                variable.set(selected.lower())
+                button.configure(bg=selected)
+
+        fixed_name_color_var = tk.StringVar(value=self.display_settings.get("fixed_name_color", "#ffffff"))
+        ttk.Label(color_box, text="Feste Namensfarbe").grid(row=3, column=0, sticky="w")
+        fixed_name_entry = ttk.Entry(color_box, textvariable=fixed_name_color_var, width=12)
+        fixed_name_entry.grid(row=3, column=1, sticky="w")
+        make_color_picker(color_box, fixed_name_color_var, 3, 2)
+
+        message_color_var = tk.StringVar(value=self.display_settings.get("message_text_color", "#f5f5f7"))
+        ttk.Label(color_box, text="Nachrichtenfarbe").grid(row=4, column=0, sticky="w", pady=(7, 0))
+        ttk.Entry(color_box, textvariable=message_color_var, width=12).grid(row=4, column=1, sticky="w", pady=(7, 0))
+        make_color_picker(color_box, message_color_var, 4, 2)
+
+        palette_box = ttk.LabelFrame(color_box, text="Eigene Farbpalette", padding=8)
+        palette_box.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(12, 8))
+        palette_box.columnconfigure(0, weight=1)
+        palette_list = tk.Listbox(
+            palette_box, height=5, exportselection=False, bg="#100817", fg="#ffffff",
+            selectbackground=self.colors["purple"], selectforeground="#ffffff",
+            highlightthickness=1, highlightbackground=self.colors["border"], relief="flat",
+        )
+        palette_list.grid(row=0, column=0, rowspan=3, sticky="nsew", padx=(0, 10))
+        palette_var = tk.StringVar()
+        ttk.Entry(palette_box, textvariable=palette_var, width=14).grid(row=0, column=1, sticky="w")
+        palette_picker = make_color_picker(palette_box, palette_var, 0, 2)
+        palette_buttons = ttk.Frame(palette_box)
+        palette_buttons.grid(row=1, column=1, columnspan=2, sticky="w", pady=(6, 0))
+
+        def refresh_palette(selected_index=None):
+            palette_list.delete(0, "end")
+            for color in palette_values:
+                palette_list.insert("end", color)
+            if selected_index is not None and palette_values:
+                selected_index = min(selected_index, len(palette_values) - 1)
+                palette_list.selection_set(selected_index)
+                palette_list.activate(selected_index)
+
+        def select_palette_color(_event=None):
+            selected = palette_list.curselection()
+            if selected:
+                palette_var.set(palette_values[selected[0]])
+                palette_picker.configure(bg=palette_values[selected[0]])
+
+        def upsert_palette_color():
+            color = normalize_display_color(palette_var.get(), "")
+            if not color:
+                messagebox.showwarning(APP_NAME, "Bitte eine gültige Farbe im Format #RRGGBB eingeben.")
+                return
+            selected = palette_list.curselection()
+            if selected:
+                palette_values[selected[0]] = color
+                index = selected[0]
+            else:
+                if color not in palette_values:
+                    palette_values.append(color)
+                index = palette_values.index(color)
+            refresh_palette(index)
+            palette_var.set(color)
+            palette_picker.configure(bg=color)
+
+        def remove_palette_color():
+            selected = palette_list.curselection()
+            if not selected:
+                return
+            del palette_values[selected[0]]
+            refresh_palette()
+
+        palette_values = [
+            normalize_display_color(color, "")
+            for color in self.display_settings.get("name_color_palette", DISPLAY_DEFAULTS["name_color_palette"])
+        ]
+        palette_values = [color for color in palette_values if color]
+        refresh_palette()
+        palette_list.bind("<<ListboxSelect>>", select_palette_color)
+        ttk.Button(palette_buttons, text="Hinzufügen / ersetzen", command=upsert_palette_color).pack(side="left", padx=(0, 5))
+        ttk.Button(palette_buttons, text="Entfernen", command=remove_palette_color).pack(side="left", padx=5)
+        ttk.Button(
+            palette_buttons, text="Standardpalette", command=lambda: (palette_values.clear(), palette_values.extend(DISPLAY_DEFAULTS["name_color_palette"]), refresh_palette())
+        ).pack(side="left", padx=5)
+        ttk.Label(
+            palette_box, text="Die Palette wird anhand des Benutzernamens stabil zugeordnet.", style="Sub.TLabel"
+        ).grid(row=2, column=1, columnspan=2, sticky="w", pady=(6, 0))
+
+        platform_box = ttk.LabelFrame(color_box, text="Feste Plattformfarben", padding=8)
+        platform_box.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(0, 8))
+        platform_color_vars = {}
+        for column, platform in enumerate(DISPLAY_PLATFORMS):
+            platform_box.columnconfigure(column, weight=1)
+            ttk.Label(platform_box, text=platform.upper()).grid(row=0, column=column, sticky="w", padx=(0, 6))
+            color_var = tk.StringVar(
+                value=self.display_settings.get("platform_name_colors", {}).get(
+                    platform, DISPLAY_DEFAULTS["platform_name_colors"][platform]
+                )
+            )
+            platform_color_vars[platform] = color_var
+            ttk.Entry(platform_box, textvariable=color_var, width=10).grid(row=1, column=column, sticky="ew", padx=(0, 6))
+            make_color_picker(platform_box, color_var, 2, column, DISPLAY_DEFAULTS["platform_name_colors"][platform])
+
+        user_box = ttk.LabelFrame(color_box, text="Feste Farbe für einzelne Benutzer", padding=8)
+        user_box.grid(row=7, column=0, columnspan=3, sticky="ew")
+        user_box.columnconfigure(0, weight=1)
+        user_color_list = tk.Listbox(
+            user_box, height=5, exportselection=False, bg="#100817", fg="#ffffff",
+            selectbackground=self.colors["purple"], selectforeground="#ffffff",
+            highlightthickness=1, highlightbackground=self.colors["border"], relief="flat",
+        )
+        user_color_list.grid(row=0, column=0, rowspan=3, sticky="nsew", padx=(0, 10))
+        user_name_var = tk.StringVar()
+        user_color_var = tk.StringVar(value="#ffffff")
+        ttk.Label(user_box, text="Benutzername").grid(row=0, column=1, sticky="w")
+        ttk.Entry(user_box, textvariable=user_name_var, width=24).grid(row=0, column=2, sticky="w", padx=(6, 0))
+        ttk.Label(user_box, text="Farbe").grid(row=1, column=1, sticky="w", pady=(6, 0))
+        ttk.Entry(user_box, textvariable=user_color_var, width=12).grid(row=1, column=2, sticky="w", padx=(6, 0), pady=(6, 0))
+        user_color_picker = make_color_picker(user_box, user_color_var, 1, 3)
+        user_color_values = dict(self.display_settings.get("user_name_colors", {}))
+
+        def refresh_user_colors(selected_name=None):
+            user_color_list.delete(0, "end")
+            for username in sorted(user_color_values):
+                user_color_list.insert("end", f"{username}    {user_color_values[username]}")
+            if selected_name in user_color_values:
+                index = sorted(user_color_values).index(selected_name)
+                user_color_list.selection_set(index)
+                user_color_list.activate(index)
+
+        def select_user_color(_event=None):
+            selected = user_color_list.curselection()
+            if selected:
+                username = sorted(user_color_values)[selected[0]]
+                user_name_var.set(username)
+                user_color_var.set(user_color_values[username])
+                user_color_picker.configure(bg=user_color_values[username])
+
+        def upsert_user_color():
+            username = user_name_var.get().strip().lower()
+            color = normalize_display_color(user_color_var.get(), "")
+            if not username:
+                messagebox.showwarning(APP_NAME, "Bitte einen Benutzernamen eingeben.")
+                return
+            if not color:
+                messagebox.showwarning(APP_NAME, "Bitte eine gültige Farbe im Format #RRGGBB eingeben.")
+                return
+            user_color_values[username] = color
+            refresh_user_colors(username)
+            user_name_var.set(username)
+            user_color_var.set(color)
+            user_color_picker.configure(bg=color)
+
+        def remove_user_color():
+            selected = user_color_list.curselection()
+            username = sorted(user_color_values)[selected[0]] if selected else user_name_var.get().strip().lower()
+            if username in user_color_values:
+                del user_color_values[username]
+                refresh_user_colors()
+                user_name_var.set("")
+
+        user_color_list.bind("<<ListboxSelect>>", select_user_color)
+        ttk.Button(user_box, text="Übernehmen", command=upsert_user_color).grid(row=2, column=1, sticky="w", pady=(6, 0))
+        ttk.Button(user_box, text="Entfernen", command=remove_user_color).grid(row=2, column=2, sticky="w", padx=(6, 0), pady=(6, 0))
+        ttk.Label(
+            user_box,
+            text="Benutzernamen werden ohne Beachtung der Groß-/Kleinschreibung verglichen und gelten plattformübergreifend.",
+            style="Sub.TLabel", wraplength=480,
+        ).grid(row=3, column=1, columnspan=3, sticky="w", pady=(6, 0))
+        refresh_user_colors()
+
         box2 = ttk.LabelFrame(self.form, text="Nachrichten", padding=14)
         box2.pack(fill="x", pady=(0, 14))
         box2.columnconfigure(1, weight=1)
@@ -1418,9 +1705,38 @@ class Manager(tk.Tk):
                 messagebox.showwarning(APP_NAME, "Bitte eine Zahl zwischen 1 und 300 Sekunden eingeben.")
                 return
 
+            try:
+                chat_font_size = max(8, min(32, int(font_size_var.get())))
+            except (TypeError, ValueError):
+                messagebox.showwarning(APP_NAME, "Bitte eine Schriftgröße zwischen 8 und 32 px eingeben.")
+                return
+
+            color_values = {
+                "Feste Namensfarbe": fixed_name_color_var.get(),
+                "Nachrichtenfarbe": message_color_var.get(),
+                **{f"Plattformfarbe {platform.upper()}": variable.get() for platform, variable in platform_color_vars.items()},
+            }
+            invalid = [label for label, value in color_values.items() if not normalize_display_color(value, "")]
+            if invalid:
+                messagebox.showwarning(APP_NAME, "Ungültiger Farbwert für: " + ", ".join(invalid) + ". Bitte #RRGGBB verwenden.")
+                return
+            if not palette_values:
+                messagebox.showwarning(APP_NAME, "Die eigene Farbpalette benötigt mindestens eine Farbe.")
+                return
+
             self.display_settings["chat_layout"] = style_var.get() if style_var.get() in CHAT_STYLE_DEFS else "classic"
             self.display_settings["auto_hide_messages"] = bool(auto_hide.get())
             self.display_settings["message_lifetime_seconds"] = seconds
+            self.display_settings["chat_font_size"] = chat_font_size
+            self.display_settings["name_color_mode"] = color_mode_reverse.get(color_mode_var.get(), "auto")
+            self.display_settings["fixed_name_color"] = normalize_display_color(fixed_name_color_var.get(), "#ffffff")
+            self.display_settings["message_text_color"] = normalize_display_color(message_color_var.get(), "#f5f5f7")
+            self.display_settings["name_color_palette"] = [normalize_display_color(color, "#ffffff") for color in palette_values]
+            self.display_settings["platform_name_colors"] = {
+                platform: normalize_display_color(variable.get(), DISPLAY_DEFAULTS["platform_name_colors"][platform])
+                for platform, variable in platform_color_vars.items()
+            }
+            self.display_settings["user_name_colors"] = normalize_display_color_map(user_color_values)
             try:
                 self.save_manager_start_options({
                     "start_with_windows": startup_var.get(),

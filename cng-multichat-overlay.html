@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>CNG MultiChat Overlay</title>
 <style>
-:root{--panel:rgba(8,9,13,.82);--border:rgba(255,255,255,.10);--text:#f5f5f7;--kick:#53e000;--twitch:#9147ff;--tiktok:#25f4ee;--cng:#ff8a00;--youtube:#ff0000}
+:root{--panel:rgba(8,9,13,.82);--border:rgba(255,255,255,.10);--text:#f5f5f7;--kick:#53e000;--twitch:#9147ff;--tiktok:#25f4ee;--cng:#ff8a00;--youtube:#ff0000;--chat-font-size:14px;--message-text-color:#f5f5f7}
 *{box-sizing:border-box}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}
 body{font-family:Inter,Segoe UI,Arial,"Noto Color Emoji","Segoe UI Emoji","Apple Color Emoji",sans-serif;color:var(--text);padding:16px}
@@ -20,16 +20,16 @@ body{font-family:Inter,Segoe UI,Arial,"Noto Color Emoji","Segoe UI Emoji","Apple
 .content{min-width:0;max-width:calc(100% - 46px);background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--platform);border-radius:10px;padding:7px 10px 8px;backdrop-filter:blur(5px)}
 .head{display:flex;align-items:center;gap:7px;line-height:1.1;margin-bottom:3px}
 .platform{font-size:10px;font-weight:800;letter-spacing:.7px;color:var(--platform)}
-.name{font-size:13px;font-weight:750;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.name{font-size:calc(var(--chat-font-size)*.93);font-weight:750;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .badges{display:flex;gap:3px;flex-wrap:wrap}
 .badge{font-size:9px;padding:2px 4px;border-radius:4px;background:rgba(255,255,255,.12);color:#ddd}
-.text{font-size:14px;line-height:1.45;word-wrap:break-word;white-space:pre-wrap;overflow-wrap:anywhere;font-family:Inter,Segoe UI,Arial,"Noto Color Emoji","Segoe UI Emoji","Apple Color Emoji",sans-serif}
-.chat-emote{height:28px;width:auto;max-width:96px;vertical-align:middle;object-fit:contain;margin:0 1px}
-.twitch .chat-emote{height:28px}
-.kick .chat-emote{height:28px}
-.cng-emote{height:28px}
-.tiktok-emote{height:28px}
-.youtube-emote{height:28px}
+.text{font-size:var(--chat-font-size);line-height:1.45;color:var(--message-text-color);word-wrap:break-word;white-space:pre-wrap;overflow-wrap:anywhere;font-family:Inter,Segoe UI,Arial,"Noto Color Emoji","Segoe UI Emoji","Apple Color Emoji",sans-serif}
+.chat-emote{height:calc(var(--chat-font-size)*2);width:auto;max-width:96px;vertical-align:middle;object-fit:contain;margin:0 1px}
+.twitch .chat-emote{height:calc(var(--chat-font-size)*2)}
+.kick .chat-emote{height:calc(var(--chat-font-size)*2)}
+.cng-emote{height:calc(var(--chat-font-size)*2)}
+.tiktok-emote{height:calc(var(--chat-font-size)*2)}
+.youtube-emote{height:calc(var(--chat-font-size)*2)}
 /* ============================================================
    CHAT LAYOUT VARIANTS
    ============================================================ */
@@ -47,8 +47,8 @@ body{font-family:Inter,Segoe UI,Arial,"Noto Color Emoji","Segoe UI Emoji","Apple
 #chat.style-minimal .content{background:transparent;border:0;border-left:2px solid var(--platform);border-radius:0;padding:2px 7px;backdrop-filter:none}
 #chat.style-minimal .head{display:inline-flex;margin:0 6px 0 0;vertical-align:baseline}
 #chat.style-minimal .platform{font-size:8px;opacity:.8}
-#chat.style-minimal .name{font-size:12px}
-#chat.style-minimal .text{display:inline;font-size:13px;line-height:1.3}
+#chat.style-minimal .name{font-size:calc(var(--chat-font-size)*.86)}
+#chat.style-minimal .text{display:inline;font-size:calc(var(--chat-font-size)*.93);line-height:1.3}
 
 /* BUBBLE — rounded speech bubble */
 #chat.style-bubble{gap:10px}
@@ -57,7 +57,7 @@ body{font-family:Inter,Segoe UI,Arial,"Noto Color Emoji","Segoe UI Emoji","Apple
 #chat.style-bubble .content{background:rgba(22,24,32,.95);border:1px solid rgba(255,255,255,.10);border-left:0;border-radius:20px 20px 20px 5px;padding:9px 13px 10px}
 #chat.style-bubble .head{margin-bottom:4px}
 #chat.style-bubble .platform{font-size:9px;text-transform:uppercase}
-#chat.style-bubble .text{font-size:14px;line-height:1.4}
+#chat.style-bubble .text{font-size:var(--chat-font-size);line-height:1.4}
 
 /* COMPACT — dense full-width strips */
 #chat.style-compact{gap:3px;padding:0}
@@ -66,9 +66,9 @@ body{font-family:Inter,Segoe UI,Arial,"Noto Color Emoji","Segoe UI Emoji","Apple
 #chat.style-compact .content{width:100%;max-width:100%;background:rgba(7,8,11,.90);border:0;border-left:4px solid var(--platform);border-radius:2px;padding:4px 8px}
 #chat.style-compact .head{gap:5px;margin-bottom:1px}
 #chat.style-compact .platform{font-size:8px}
-#chat.style-compact .name{font-size:11px}
-#chat.style-compact .text{font-size:12px;line-height:1.25}
-#chat.style-compact .chat-emote{height:22px}
+#chat.style-compact .name{font-size:calc(var(--chat-font-size)*.79)}
+#chat.style-compact .text{font-size:calc(var(--chat-font-size)*.86);line-height:1.25}
+#chat.style-compact .chat-emote{height:calc(var(--chat-font-size)*1.57)}
 
 /* NEON — angular gaming HUD */
 #chat.style-neon{gap:11px;padding:5px 3px}
@@ -78,8 +78,8 @@ body{font-family:Inter,Segoe UI,Arial,"Noto Color Emoji","Segoe UI Emoji","Apple
 #chat.style-neon .content::before{content:"";position:absolute;left:0;right:0;top:0;height:1px;background:var(--platform);box-shadow:0 0 8px var(--platform)}
 #chat.style-neon .content::after{content:"";position:absolute;right:-18px;bottom:-18px;width:50px;height:50px;border:1px solid color-mix(in srgb,var(--platform) 45%,transparent);transform:rotate(45deg)}
 #chat.style-neon .platform{font-size:8px;font-weight:900;letter-spacing:1.4px;text-shadow:0 0 8px var(--platform)}
-#chat.style-neon .name{font-size:13px}
-#chat.style-neon .text{font-size:14px;line-height:1.4}
+#chat.style-neon .name{font-size:calc(var(--chat-font-size)*.93)}
+#chat.style-neon .text{font-size:var(--chat-font-size);line-height:1.4}
 
 /* FANCY — premium streamer card */
 #chat.style-fancy{gap:13px;padding:6px 2px}
@@ -90,11 +90,11 @@ body{font-family:Inter,Segoe UI,Arial,"Noto Color Emoji","Segoe UI Emoji","Apple
 #chat.style-fancy .content::after{content:"◆";position:absolute;right:12px;top:8px;font-size:8px;color:var(--platform);opacity:.9;text-shadow:0 0 9px var(--platform)}
 #chat.style-fancy .head{gap:7px;margin-bottom:5px;min-height:17px}
 #chat.style-fancy .platform{order:0;font-size:8px;font-weight:900;letter-spacing:1px;padding:3px 6px;border-radius:3px;background:color-mix(in srgb,var(--platform) 15%,transparent);border:1px solid color-mix(in srgb,var(--platform) 45%,transparent);text-shadow:0 0 7px color-mix(in srgb,var(--platform) 60%,transparent)}
-#chat.style-fancy .name{order:1;font-size:13px;font-weight:800}
+#chat.style-fancy .name{order:1;font-size:calc(var(--chat-font-size)*.93);font-weight:800}
 #chat.style-fancy .badges{order:2}
 #chat.style-fancy .badge{font-size:8px;padding:2px 4px;border-radius:3px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.08)}
-#chat.style-fancy .text{font-size:14px;line-height:1.42;color:#f2f2f5;text-shadow:0 1px 1px rgba(0,0,0,.4)}
-#chat.style-fancy .chat-emote{height:30px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.4))}
+#chat.style-fancy .text{font-size:var(--chat-font-size);line-height:1.42;color:var(--message-text-color);text-shadow:0 1px 1px rgba(0,0,0,.4)}
+#chat.style-fancy .chat-emote{height:calc(var(--chat-font-size)*2.14);filter:drop-shadow(0 2px 4px rgba(0,0,0,.4))}
 
 @keyframes in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 @keyframes out{from{opacity:1;transform:translateY(0);max-height:300px}
@@ -131,8 +131,51 @@ const DISPLAY_CONFIG={
   autoHideMessages:true,
   messageLifetimeSeconds:10,
   chatLayout:"classic",
-  chatStyle:"classic"
+  chatStyle:"classic",
+  chatFontSize:14,
+  nameColorMode:"auto",
+  fixedNameColor:"#ffffff",
+  nameColorPalette:["#ff6b6b","#4dabf7","#51cf66","#ffd43b","#cc5de8","#20c997","#ff922b","#f06595"],
+  platformNameColors:{twitch:"#9147ff",kick:"#53e000",cng:"#ff8a00",tiktok:"#25f4ee",youtube:"#ff0000"},
+  userNameColors:{},
+  messageTextColor:"#f5f5f7"
 };
+
+function normalizedColor(value,fallback){
+  const color=String(value||"").trim();
+  return /^#[0-9a-f]{6}$/i.test(color)?color.toLowerCase():fallback;
+}
+
+function stableNameHash(name){
+  const key=String(name??"").trim().toLowerCase();
+  let hash=0;
+  for(let i=0;i<key.length;i++) hash=((hash<<5)-hash)+key.charCodeAt(i)|0;
+  return {key,hash};
+}
+
+function resolveNameColor(name,platform){
+  const {key,hash}=stableNameHash(name);
+  if(!key) return "#ffffff";
+  if(DISPLAY_CONFIG.userNameColors[key]) return DISPLAY_CONFIG.userNameColors[key];
+  switch(DISPLAY_CONFIG.nameColorMode){
+    case "palette":
+      return DISPLAY_CONFIG.nameColorPalette[Math.abs(hash)%DISPLAY_CONFIG.nameColorPalette.length]||"#ffffff";
+    case "platform":
+      return DISPLAY_CONFIG.platformNameColors[platform]||"#ffffff";
+    case "fixed":
+      return DISPLAY_CONFIG.fixedNameColor;
+    default:{
+      const hue=Math.abs(hash)%360;
+      return `hsl(${hue} 68% 68%)`;
+    }
+  }
+}
+
+function recolorExistingNames(){
+  document.querySelectorAll(".name[data-username]").forEach(element=>{
+    element.style.color=resolveNameColor(element.dataset.username,element.dataset.platform);
+  });
+}
 
 async function loadDisplayConfig(){
   try{
@@ -183,6 +226,30 @@ function applyDisplayConfig(data){
   DISPLAY_CONFIG.chatStyle=allowedStyles.includes(style)?style:"classic";
 
   chat.className="style-"+DISPLAY_CONFIG.chatStyle;
+
+  const fontSize=Number(data.chat_font_size);
+  if(Number.isFinite(fontSize)){
+    DISPLAY_CONFIG.chatFontSize=Math.max(8,Math.min(32,fontSize));
+    document.documentElement.style.setProperty("--chat-font-size",DISPLAY_CONFIG.chatFontSize+"px");
+  }
+  const allowedColorModes=["auto","palette","platform","fixed"];
+  const colorMode=String(data.name_color_mode||"auto").toLowerCase();
+  DISPLAY_CONFIG.nameColorMode=allowedColorModes.includes(colorMode)?colorMode:"auto";
+  DISPLAY_CONFIG.fixedNameColor=normalizedColor(data.fixed_name_color,"#ffffff");
+  const palette=Array.isArray(data.name_color_palette)?data.name_color_palette.map(color=>normalizedColor(color,"")).filter(Boolean):[];
+  DISPLAY_CONFIG.nameColorPalette=palette.length?palette:["#ff6b6b","#4dabf7","#51cf66","#ffd43b","#cc5de8","#20c997","#ff922b","#f06595"];
+  const platformDefaults={twitch:"#9147ff",kick:"#53e000",cng:"#ff8a00",tiktok:"#25f4ee",youtube:"#ff0000"};
+  const platformColors=data.platform_name_colors&&typeof data.platform_name_colors==="object"?data.platform_name_colors:{};
+  DISPLAY_CONFIG.platformNameColors=Object.fromEntries(Object.entries(platformDefaults).map(([platform,color])=>[platform,normalizedColor(platformColors[platform],color)]));
+  const rawUserColors=data.user_name_colors&&typeof data.user_name_colors==="object"?data.user_name_colors:{};
+  DISPLAY_CONFIG.userNameColors={};
+  Object.entries(rawUserColors).forEach(([name,color])=>{
+    const key=String(name||"").trim().toLowerCase(),valid=normalizedColor(color,"");
+    if(key&&valid) DISPLAY_CONFIG.userNameColors[key]=valid;
+  });
+  DISPLAY_CONFIG.messageTextColor=normalizedColor(data.message_text_color,"#f5f5f7");
+  document.documentElement.style.setProperty("--message-text-color",DISPLAY_CONFIG.messageTextColor);
+  recolorExistingNames();
 
   console.log("[CNG MultiChat] Live-Layout:",DISPLAY_CONFIG.chatStyle);
 }
@@ -602,6 +669,14 @@ function addMessage(d){
       </div>
       <div class="text">${renderMessage(d)}</div>
     </div>`;
+
+  const nameElement=e.querySelector(".name");
+  if(nameElement){
+    const username=String(d.username||"Unbekannt");
+    nameElement.dataset.username=username;
+    nameElement.dataset.platform=p;
+    nameElement.style.color=resolveNameColor(username,p);
+  }
 
   chat.appendChild(e);
   if(DISPLAY_CONFIG.autoHideMessages){
