@@ -197,10 +197,12 @@ function renderTwitch(text, raw){
 }
 
 const CNG_EMOTES = {
+  // Emotionen
+  // Aktionen
+  // Gaming & Memes
+  // Spezial
   ":happy:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-happy-dd9c2PYTAEzo843pAuC5HA.webp",
-  ":wink:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-wink-8EntH6XLqXhbdYNcwAcvA2.webp",
   ":sad:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-sad-buqEk7HWyP8qkVFndko5m4.webp",
-  ":evil:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-evil-SPeQQjGqPXviqfyAkLD5mB.webp",
   ":angry:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-angry-QWLYj2xAEFtuzPVF6vRQye.webp",
   ":love:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-love-VxomXxRhM386U9AaBLtQVy.webp",
   ":hype:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-hype-FPWCK2kLHz6pSMbQvKod2R.webp",
@@ -208,9 +210,42 @@ const CNG_EMOTES = {
   ":cool:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-cool-Vjoar8GadCW8M4LeoMwHvm.webp",
   ":thinking:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-thinking-UeQC2VRu22SajWSj2NfgT9.webp",
   ":nervous:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-nervous-Hv84Nm5cGddpC8askYnQiS.webp",
+  ":wink:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-wink-8EntH6XLqXhbdYNcwAcvA2.webp",
   ":blush:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-blush-YVgbviX29mL7sk5eabZ9u9.webp",
+  ":evil:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-evil-SPeQQjGqPXviqfyAkLD5mB.webp",
   ":dizzy:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-dizzy-nuAg4ctMRnw5VDLuhWo2C6.webp",
-  ":sick:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-sick-FNjHdUu3mxMfSiHYwfZmWH.webp"
+  ":sick:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-sick-FNjHdUu3mxMfSiHYwfZmWH.webp",
+  ":clap:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-clap-3P64FNEEezbkifnz62UxvU.webp",
+  ":pray:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-pray-kdMTNrt8LCUovGKepEtQMY.webp",
+  ":facepalm:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-facepalm-Wzk6kvNnzEsxF5g3pELQXh.webp",
+  ":flex:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-flex-fzExKHfBy6zKL66EVtwXrG.webp",
+  ":sleep:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-sleep-4uLbvNLtK3JtCofoTrrma5.webp",
+  ":rage:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-rage-8YvvhPK2VyfscaksgMED29.webp",
+  ":salute:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-salute-6xwvFViWmqnVtdmuYi9AMM.webp",
+  ":shrug:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-shrug-3ZE8ppPQPU2AZr2mGBMV7i.webp",
+  ":laugh:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-laugh-5DRopyjoQfxK9rpQu4Adnf.webp",
+  ":gg:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-gg-TLR9vuEYnDLetAVxPwGfKW.webp",
+  ":pog:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-pog-EsafreknLXKoqmRumYC2pS.webp",
+  ":sus:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-sus-ZDjzkzeaHs8ExcXYHyaVwd.webp",
+  ":based:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-based-H7D9ACSFm6UznfTeYyR2Tt.webp",
+  ":ratio:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-ratio-aFBVSWTvrmhYMTLQ2Mo6cK.webp",
+  ":cope:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-cope-BMmLiAxZe9T2CHuCbtXM3y.webp",
+  ":salty:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-salty-WrKuwxegPEGMieRNrsFysr.webp",
+  ":poggers:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-poggers-3EVeTYPSe3dHxga9iprhHF.webp",
+  ":monkas:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-monkas-PB9XdTz6EfPHhyhrHeN9zW.webp",
+  ":wtf:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-wtf-i7FvsRdFE7vUDQYmNa5KHD.webp",
+  ":bruh:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-bruh-ZnrbDWMQfvAt4KMnEmnDfr.webp",
+  ":yikes:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-yikes-iUjSuiKotpN56VGzYphwCw.webp",
+  ":cringe:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-cringe-3KgZXvVVT7Pg3FDZ3N5hGe.webp",
+  ":gigachad:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-gigachad-aJ3ESqAAkhpFme3zvquHMt.webp",
+  ":party:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-party-V2YkAETRAG7gt5YTQeLEyA.webp",
+  ":victory:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-victory-9yu5pgHcxuF6ygAZesvfWc.webp",
+  ":crown:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-crown-cuKKRXcgjBDg4wg2EjCRWQ.webp",
+  ":rocket:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-rocket-mak4FXH5DsdkKxNVUfimFc.webp",
+  ":diamond:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-diamond-o97Rg2nvFvFhdLruCkchtf.webp",
+  ":fire:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-fire-QtjGsLukXEqVHsy9YBmqLg.webp",
+  ":ice:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-ice-3K8VLUn7bGrkXJFcd4kZ2Q.webp",
+  ":star:": "https://d2xsxph8kpxj0f.cloudfront.net/310519663749543188/m33rPiUyWUdQ4GWY9CNsmV/cng-emote-star-5pvrHJQQdBdUtrWXb9kwcD.webp"
 };
 
 function renderCng(text, emotes){

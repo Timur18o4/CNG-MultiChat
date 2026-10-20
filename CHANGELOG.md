@@ -1,5 +1,11 @@
 # Änderungen
 
+## v1.0.8 — 20.10.2026
+
+### CNG-Chat
+
+- Alle 45 offiziellen CNG-Emotes aus den Kategorien Emotionen, Aktionen, Gaming & Memes und Spezial werden in den Chatansichten als Bilder dargestellt.
+
 ## v1.0.7 — 20.10.2026
 
 ### Alerts
