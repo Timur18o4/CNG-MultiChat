@@ -77,11 +77,13 @@ html, body {
 <div id="alerts"></div>
 
 <script>
-// The bridge sends GIF/sound alerts through the dedicated alert stream.
-// Chat/system messages are handled by the separate chat overlay.
-// Local OBS browser source: connect to the local bridge, not the file:// origin.
-// This is the bridge's local transport; CNG itself is polled over its legacy API.
-const BRIDGE_BASE_URL = "http://127.0.0.1:8765";
+// Use the same Bridge host that served this page. This is important when OBS
+// loads the alert overlay from a Raspberry Pi or another machine on the LAN:
+// 127.0.0.1 would then point at the OBS computer instead of the Bridge.
+// Keep a loopback fallback for users who open the HTML file directly.
+const BRIDGE_BASE_URL = window.location.protocol === "file:"
+    ? "http://127.0.0.1:8765"
+    : window.location.origin;
 const ENDPOINTS = [
     `${BRIDGE_BASE_URL}/alert-events`
 ];

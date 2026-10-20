@@ -1,5 +1,11 @@
 # Änderungen
 
+## v1.0.7 — 20.10.2026
+
+### Alerts
+
+- Das Alert-Overlay verwendet den Host, von dem es geladen wurde, auch für den Ereignis- und Medienabruf. Dadurch funktionieren GIFs und Sounds auch dann, wenn OBS die Seite über die LAN-Adresse eines Raspberry Pi öffnet.
+
 ## v1.0.6 — 20.10.2026
 
 ### Chat-Anzeige
