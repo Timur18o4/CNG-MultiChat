@@ -1,5 +1,12 @@
 # Änderungen
 
+## v1.0.9 — 20.10.2026
+
+### CNG-Chat
+
+- CNG-Emotes werden auch dann aus der vollständigen Emote-Liste ergänzt, wenn die Bridge für andere Emotes bereits Bilddaten liefert.
+- Bei nicht ladbaren Emote-Bildern bleibt der ursprüngliche Emote-Text sichtbar.
+
 ## v1.0.8 — 20.10.2026
 
 ### CNG-Chat

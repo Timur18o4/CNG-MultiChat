@@ -434,66 +434,59 @@ const CNG_EMOTES = {
 function renderCng(text, emotes){
   const source=String(text??"");
   const list=Array.isArray(emotes)?emotes:[];
+  const matches=[];
+  const dynamicTokenOffsets=new Map();
 
-  // The bridge already resolves CNG :name: tokens to the exact image URLs
-  // returned by CNG. Prefer those URLs; the local map is only a fallback.
-  const resolved=list
-    .map(e=>({
-      token:String(e?.token||e?.name||"").trim(),
-      url:safeUrl(e?.url||e?.image_url||e?.imageUrl||e?.src||""),
-      start:Number(e?.start),
-      end:Number(e?.end),
-      name:String(e?.name||e?.token||"").trim()
-    }))
-    .filter(e=>e.url);
+  // Keep explicitly resolved URLs, then fill gaps from the complete CNG map.
+  for(const e of list){
+    if(!e || typeof e!=="object") continue;
+    const url=safeUrl(e.url||e.image_url||e.imageUrl||e.src||e.image||"");
+    if(!url) continue;
 
-  if(!resolved.length){
-    let out="";
-    const re=/:([a-zA-Z0-9_]+):/g;
-    let last=0;
-    let m;
-    while((m=re.exec(source))!==null){
-      const token=m[0];
-      const url=safeUrl(CNG_EMOTES[token.toLowerCase()]||"");
-      if(!url) continue;
-      out+=esc(source.slice(last,m.index));
-      out+=`<img class="chat-emote cng-emote" src="${esc(url)}" alt="${esc(m[1])}" title="${esc(m[1])}" onerror="this.replaceWith(document.createTextNode(${JSON.stringify(token)}))">`;
-      last=m.index+token.length;
+    const rawToken=String(e.token||e.code||e.text||e.name||"").trim();
+    const name=String(e.name||rawToken||"").trim();
+    const rawStart=e.start;
+    const rawEnd=e.end;
+    const start=Number(rawStart);
+    const end=Number(rawEnd);
+
+    if(rawStart!==undefined&&rawStart!==null&&rawStart!==""&&rawEnd!==undefined&&rawEnd!==null&&rawEnd!==""&&Number.isInteger(start)&&Number.isInteger(end)&&start>=0&&end>=start&&end<source.length){
+      matches.push({start,end,url,name,dynamic:true});
+      continue;
     }
-    return out+esc(source.slice(last));
+
+    if(!rawToken) continue;
+    const token=/^:[a-zA-Z0-9_]+:$/.test(rawToken)
+      ? rawToken
+      : (/^[a-zA-Z0-9_]+$/.test(rawToken)?`:${rawToken}:`:rawToken);
+    const searchFrom=dynamicTokenOffsets.get(token)||0;
+    const index=source.indexOf(token,searchFrom);
+    if(index<0) continue;
+    matches.push({start:index,end:index+token.length-1,url,name,dynamic:true});
+    dynamicTokenOffsets.set(token,index+token.length);
   }
 
-  // Preferred path: bridge supplied character positions.
-  const ranged=resolved
-    .filter(e=>Number.isInteger(e.start)&&Number.isInteger(e.end)&&e.start>=0&&e.end>=e.start&&e.end<source.length)
-    .sort((a,b)=>a.start-b.start);
-
-  if(ranged.length){
-    let out="";
-    let pos=0;
-    let used=false;
-    for(const e of ranged){
-      if(e.start<pos) continue;
-      const token=source.slice(e.start,e.end+1);
-      out+=esc(source.slice(pos,e.start));
-      out+=`<img class="chat-emote cng-emote" src="${esc(e.url)}" alt="${esc(e.name||token)}" title="${esc(e.name||token)}" onerror="this.replaceWith(document.createTextNode(${JSON.stringify(token)}))">`;
-      pos=e.end+1;
-      used=true;
-    }
-    if(used) return out+esc(source.slice(pos));
+  const tokenPattern=/:([a-zA-Z0-9_]+):/g;
+  let tokenMatch;
+  while((tokenMatch=tokenPattern.exec(source))!==null){
+    const token=tokenMatch[0];
+    const start=tokenMatch.index;
+    const end=start+token.length-1;
+    const alreadyResolved=matches.some(m=>m.start<=start&&m.end>=end);
+    if(alreadyResolved) continue;
+    const url=safeUrl(CNG_EMOTES[token.toLowerCase()]||"");
+    if(url) matches.push({start,end,url,name:token,dynamic:false});
   }
 
-  // Final fallback: match the exact token from the bridge by text.
+  matches.sort((a,b)=>a.start-b.start||(b.dynamic?1:0)-(a.dynamic?1:0));
   let out="";
   let pos=0;
-  for(const e of resolved){
-    const token=e.token;
-    if(!token) continue;
-    const i=source.indexOf(token,pos);
-    if(i<0) continue;
-    out+=esc(source.slice(pos,i));
-    out+=`<img class="chat-emote cng-emote" src="${esc(e.url)}" alt="${esc(e.name||token)}" title="${esc(e.name||token)}" onerror="this.replaceWith(document.createTextNode(${JSON.stringify(token)}))">`;
-    pos=i+token.length;
+  for(const match of matches){
+    if(match.start<pos||match.start<0||match.end<match.start||match.end>=source.length) continue;
+    out+=esc(source.slice(pos,match.start));
+    const token=source.slice(match.start,match.end+1);
+    out+=`<img class="chat-emote cng-emote" src="${esc(match.url)}" alt="${esc(token)}" title="${esc(match.name||token)}" onerror="this.replaceWith(document.createTextNode(this.alt))">`;
+    pos=match.end+1;
   }
   return out+esc(source.slice(pos));
 }
