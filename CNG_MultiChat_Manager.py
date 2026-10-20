@@ -39,6 +39,9 @@ COMMAND_BOT_CONFIG_FILE = os.path.join(BASE_DIR, "command_bot.json")
 ALERT_CONFIG_FILE = os.path.join(BASE_DIR, "alert_settings.json")
 OBS_CONFIG_FILE = os.path.join(BASE_DIR, "obs_settings.json")
 APP_SETTINGS_FILE = os.path.join(BASE_DIR, "manager_settings.json")
+IDEAS_DISCUSSION_URL = (
+    "https://github.com/Timur18o4/CNG-MultiChat/discussions/new?category=ideas"
+)
 try:
     APP_VERSION = read_app_version(BASE_DIR)
 except Exception:
@@ -2774,6 +2777,51 @@ class Manager(tk.Tk):
         )
         self.update_check_button.pack(anchor="w")
 
+        ideas_card = tk.Frame(
+            self.form,
+            bg=self.colors["panel2"],
+            highlightbackground=self.colors["border"],
+            highlightthickness=1,
+        )
+        ideas_card.pack(fill="x", pady=(0, 18))
+        ideas_content = tk.Frame(ideas_card, bg=self.colors["panel2"])
+        ideas_content.pack(fill="x", padx=18, pady=14)
+        tk.Label(
+            ideas_content,
+            text="Ideen und Verbesserungsvorschläge",
+            bg=self.colors["panel2"],
+            fg="#ffffff",
+            font=("Segoe UI", 11, "bold"),
+        ).pack(anchor="w")
+        tk.Label(
+            ideas_content,
+            text=(
+                "Reiche Vorschläge öffentlich über GitHub ein. Zum Veröffentlichen "
+                "ist ein GitHub-Konto nötig. Bitte keine Tokens, Passwörter oder "
+                "privaten Logs teilen."
+            ),
+            bg=self.colors["panel2"],
+            fg=self.colors["muted"],
+            font=("Segoe UI", 9),
+            justify="left",
+            wraplength=620,
+        ).pack(anchor="w", pady=(5, 10))
+        tk.Button(
+            ideas_content,
+            text="Idee auf GitHub einreichen",
+            command=self.open_ideas_discussion,
+            bg=self.colors["orange"],
+            fg="#17091d",
+            activebackground="#ffb02e",
+            activeforeground="#17091d",
+            relief="flat",
+            bd=0,
+            padx=16,
+            pady=9,
+            font=("Segoe UI", 9, "bold"),
+            cursor="hand2",
+        ).pack(anchor="w")
+
         ttk.Label(self.form, text="Kanäle & Profile", style="Header.TLabel").pack(
             anchor="w", pady=(0, 4)
         )
@@ -2830,6 +2878,22 @@ class Manager(tk.Tk):
             button.pack(fill="both", expand=True)
 
         self.update_status("Über CNG MultiChat")
+
+    def open_ideas_discussion(self):
+        try:
+            opened = webbrowser.open_new_tab(IDEAS_DISCUSSION_URL)
+        except Exception as ex:
+            messagebox.showerror(
+                APP_NAME,
+                "GitHub konnte nicht im Standardbrowser geöffnet werden:\n\n" + str(ex),
+            )
+            return
+        if not opened:
+            messagebox.showwarning(
+                APP_NAME,
+                "Der Standardbrowser konnte nicht geöffnet werden. "
+                "Öffne die GitHub-Projektseite manuell.",
+            )
 
     def show_pi_deployment(self):
         self._show_manager_section(
