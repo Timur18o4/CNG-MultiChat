@@ -1,0 +1,49 @@
+title: "[Idee] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Vorschläge werden öffentlich im GitHub-Repository angezeigt. Zum Einreichen brauchst du ein GitHub-Konto.
+
+        Teile hier keine Passwörter, Tokens, Cookies, privaten Logs oder sonstigen Zugangsdaten. Angaben zu deinem CNG- oder Plattformkonto sind nicht erforderlich.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Bereich
+      description: Welcher Teil von CNG MultiChat ist betroffen?
+      options:
+        - Manager
+        - Chat und Plattformen
+        - Overlay und Livechat
+        - Alerts und Bots
+        - Statistiken
+        - Raspberry Pi
+        - Sonstiges
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: Dein Vorschlag
+      description: Beschreibe die gewünschte Änderung.
+      placeholder: Was sollte CNG MultiChat deiner Meinung nach können?
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Welches Problem würde das lösen?
+      description: Optional. Ein Beispiel hilft dabei, den Vorschlag einzuordnen.
+      placeholder: In welcher Situation wäre diese Änderung hilfreich?
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: Verwendete Version
+      description: Optional. Du findest die Versionsnummer im Manager.
+      placeholder: Zum Beispiel 1.0.6
+    validations:
+      required: false

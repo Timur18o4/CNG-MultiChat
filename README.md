@@ -10,6 +10,10 @@ Der Windows-Manager prüft beim Start im Hintergrund auf eine neuere stabile Ver
 
 Der vollständige Quellcode steht in diesem Repository unter MIT-Lizenz.
 
+## Ideen und Verbesserungsvorschläge
+
+Im Manager unter **Über / Kanäle** kannst du einen Vorschlag über GitHub Discussions einreichen. Beiträge sind öffentlich und benötigen ein GitHub-Konto. Bitte keine Zugangsdaten oder privaten Logs posten. Es gibt kein E-Mail-Formular; Benachrichtigungen von GitHub richten sich nach den jeweiligen GitHub-Einstellungen.
+
 ## Raspberry Pi
 
 Der Manager kann die aktuelle Konfiguration per SSH auf einen Raspberry Pi 5 mit Raspberry Pi OS 64-Bit übertragen. Die Einrichtung installiert die Linux-Abhängigkeiten in einer virtuellen Umgebung und richtet einen systemd-Dienst für den automatischen Start ein. Lokal konfigurierte Alert-GIFs und Sounds werden mit übertragen. Anleitung und Grenzen stehen in [Raspberry-Pi-Bereitstellung.md](Raspberry-Pi-Bereitstellung.md).
