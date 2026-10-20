@@ -1,5 +1,12 @@
 # Änderungen
 
+## v1.0.10 — 20.10.2026
+
+### Livechat
+
+- Ein optionaler Ping meldet neue Chatnachrichten.
+- Zwischen zwei Pings liegen mindestens 30 Sekunden; Nachrichten während der Sperrzeit lösen keinen vorgemerkten Ton aus.
+
 ## v1.0.9 — 20.10.2026
 
 ### CNG-Chat

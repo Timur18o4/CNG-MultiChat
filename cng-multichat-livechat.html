@@ -92,7 +92,7 @@ body::before{
 .user-name-color{font-weight:750}
 </style>
 </head><body>
-<div class="header"><div class="logo">CNG <span>MultiChat</span></div><div class="title">Live Chat</div><div class="spacer"></div><div class="status"><i id="dot" class="dot"></i><span id="status">Bridge verbunden</span></div><button id="fontDown" class="btn">A−</button><span id="fontSize" class="font-size">11px</span><button id="fontUp" class="btn">A+</button><button id="tts" class="btn">🔊 TTS AUS</button><button id="pause" class="btn">Pause</button><button id="clear" class="btn">Leeren</button></div>
+<div class="header"><div class="logo">CNG <span>MultiChat</span></div><div class="title">Live Chat</div><div class="spacer"></div><div class="status"><i id="dot" class="dot"></i><span id="status">Bridge verbunden</span></div><button id="fontDown" class="btn">A−</button><span id="fontSize" class="font-size">11px</span><button id="fontUp" class="btn">A+</button><button id="tts" class="btn">🔊 TTS AUS</button><button id="messagePing" class="btn" type="button" aria-pressed="false" title="Ping bei neuen Nachrichten aktivieren">🔕 AUS</button><button id="pause" class="btn">Pause</button><button id="clear" class="btn">Leeren</button></div>
 <div class="main"><section id="viewerPanel" class="viewer-panel"><div id="viewerList" class="viewer-list"><div class="viewer-empty">Keine aktiven Zuschauer …</div></div><button id="viewerToggle" class="viewer-toggle" type="button"><span>👥 Zuschauer</span><span id="viewerCount" class="count">(0)</span><span class="arrow">▼</span></button></section><div id="feed" class="feed"><div id="empty" class="empty">Warte auf Chatnachrichten …</div></div></div>
 <script>
 
@@ -426,7 +426,77 @@ function renderMessage(d){
   return esc(d.message||"");
 }
 
+const MESSAGE_PING_COOLDOWN_MS=30_000;
+const messagePingButton=document.getElementById("messagePing");
+let messagePingEnabled=false;
+let lastMessagePingAt=0;
+let messagePingAudioContext=null;
+
+function updateMessagePingButton(){
+  if(!messagePingButton) return;
+  messagePingButton.textContent=messagePingEnabled?"🔔 AN":"🔕 AUS";
+  messagePingButton.setAttribute("aria-pressed",String(messagePingEnabled));
+  messagePingButton.classList.toggle("active",messagePingEnabled);
+  messagePingButton.title=messagePingEnabled
+    ? "Ping bei neuen Nachrichten ausschalten"
+    : "Ping bei neuen Nachrichten einschalten";
+}
+
+function toggleMessagePing(){
+  messagePingEnabled=!messagePingEnabled;
+  if(messagePingEnabled){
+    const AudioContextConstructor=window.AudioContext||window.webkitAudioContext;
+    if(!AudioContextConstructor){
+      messagePingEnabled=false;
+      messagePingButton.title="Audio wird in diesem Browser nicht unterstützt";
+    }else{
+      try{
+        if(!messagePingAudioContext) messagePingAudioContext=new AudioContextConstructor();
+        if(messagePingAudioContext.state!=="running")
+          messagePingAudioContext.resume().catch(()=>{});
+        lastMessagePingAt=0;
+      }catch{
+        messagePingEnabled=false;
+        messagePingButton.title="Ping konnte nicht aktiviert werden";
+      }
+    }
+  }
+  updateMessagePingButton();
+}
+
+if(messagePingButton){
+  messagePingButton.addEventListener("click",toggleMessagePing);
+  updateMessagePingButton();
+}
+
+function playMessagePing(message){
+  if(!messagePingEnabled||!String(message??"").trim()) return;
+  const now=Date.now();
+  if(now-lastMessagePingAt<MESSAGE_PING_COOLDOWN_MS) return;
+  const context=messagePingAudioContext;
+  if(!context||context.state!=="running") return;
+
+  try{
+    const start=context.currentTime;
+    const oscillator=context.createOscillator();
+    const gain=context.createGain();
+    oscillator.type="sine";
+    oscillator.frequency.setValueAtTime(880,start);
+    oscillator.frequency.exponentialRampToValueAtTime(660,start+0.14);
+    gain.gain.setValueAtTime(0.0001,start);
+    gain.gain.exponentialRampToValueAtTime(0.12,start+0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001,start+0.16);
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start(start);
+    oscillator.stop(start+0.17);
+    lastMessagePingAt=now;
+  }catch(error){
+    console.warn("[Livechat] Ping konnte nicht abgespielt werden:",error);
+  }
+}
 function addMessage(d){
+  playMessagePing(d?.message??d?.text??"");
   const p=plat(d.platform);
   const e=document.createElement("div");
   e.className="message "+p;
@@ -540,7 +610,7 @@ function applyDockDisplayConfig(data){
 }
 async function loadDockDisplayConfig(){try{const response=await fetch(`${window.location.origin}/config`,{cache:"no-store"});if(!response.ok)throw new Error("HTTP "+response.status);applyDockDisplayConfig(await response.json())}catch(err){console.warn("[Unified] Anzeigeeinstellungen konnten nicht geladen werden:",err)}}
 function connectDockDisplayConfig(){const es=new EventSource(`${window.location.origin}/config-events`);es.onmessage=e=>{try{const data=JSON.parse(e.data);if(data.type==="display_config")applyDockDisplayConfig(data)}catch(err){console.warn("[Unified] Display-Config JSON-Fehler:",err)}};es.onerror=()=>console.warn("[Unified] Display-Config getrennt - automatischer Reconnect")}
-function addDock(d){if(paused)return;const p=dockPlatform(d.platform),u=d.username??d.user??d.author??"Unbekannt",m=d.message??d.text??"";const em=document.getElementById("empty");if(em)em.remove();const r=document.createElement("div");r.className="msg";r.innerHTML='<span class="badge '+p+'">'+esc(p)+'</span><span class="user">'+esc(u)+'</span><span class="text">'+renderMessage(d)+'</span><span class="time">'+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})+'</span>';const nameEl=r.querySelector(".user");if(nameEl){nameEl.dataset.username=String(u);nameEl.dataset.platform=colorPlatformKey(d.platform);const color=resolveNameColor(u,d.platform);nameEl.style.setProperty("color",color,"important");nameEl.style.setProperty("-webkit-text-fill-color",color,"important")}feed.appendChild(r);while(feed.children.length>250)feed.firstElementChild.remove();feed.scrollTop=feed.scrollHeight}
+function addDock(d){if(paused)return;const p=dockPlatform(d.platform),u=d.username??d.user??d.author??"Unbekannt",m=d.message??d.text??"";playMessagePing(m);const em=document.getElementById("empty");if(em)em.remove();const r=document.createElement("div");r.className="msg";r.innerHTML='<span class="badge '+p+'">'+esc(p)+'</span><span class="user">'+esc(u)+'</span><span class="text">'+renderMessage(d)+'</span><span class="time">'+new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})+'</span>';const nameEl=r.querySelector(".user");if(nameEl){nameEl.dataset.username=String(u);nameEl.dataset.platform=colorPlatformKey(d.platform);const color=resolveNameColor(u,d.platform);nameEl.style.setProperty("color",color,"important");nameEl.style.setProperty("-webkit-text-fill-color",color,"important")}feed.appendChild(r);while(feed.children.length>250)feed.firstElementChild.remove();feed.scrollTop=feed.scrollHeight}
 document.getElementById("fontDown").onclick=()=>{fontUserOverride=true;chatFont=Math.max(8,chatFont-1);applyFont()};document.getElementById("fontUp").onclick=()=>{fontUserOverride=true;chatFont=Math.min(24,chatFont+1);applyFont()};document.getElementById("pause").onclick=e=>{paused=!paused;e.target.textContent=paused?"Fortsetzen":"Pause";e.target.classList.toggle("active",paused)};document.getElementById("clear").onclick=()=>feed.innerHTML='<div id="empty" class="empty">Warte auf Chatnachrichten …</div>';
 loadDockDisplayConfig();connectDockDisplayConfig();setInterval(loadDockDisplayConfig,30000);
 let ttsEnabled=false;
